@@ -6,15 +6,16 @@
 #include <mysql.h>
 #include "OVESP.h"
 
-int clients[NB_MAX_CLIENTS];
+
 int nbClients = 0;
 
+int EstPresent(int socket);
 
 //***** Parsing de la requete et creation de la reponse *************
 bool OVESP(char* requete , char* reponse ,int socket )
 {
     // ***** Récupération nom de la requete *****************
-    char* ptr = strok(requete,"#");
+    char* ptr = strtok(requete,"#");
 
     // ***** LOGIN ******************************************
     if (strcmp(ptr,"LOGIN") == 0) 
@@ -29,7 +30,7 @@ bool OVESP(char* requete , char* reponse ,int socket )
             exit(1);
         }
     }
-
+    return true;
 
 }
 
