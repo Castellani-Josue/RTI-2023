@@ -2,9 +2,19 @@
 #include "ui_windowclient.h"
 #include <QMessageBox>
 #include <string>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <signal.h>
+#include "../Socket/socket.h" //signifie que vous incluez le fichier socket.h qui se trouve dans le répertoire Socket 
+                              //du répertoire parent du répertoire où se trouve votre fichier source actuel.
 using namespace std;
 
 extern WindowClient *w;
+
+void HandlerSIGINT(int s);
+
 
 #define REPERTOIRE_IMAGES "images/"
 
@@ -32,6 +42,17 @@ WindowClient::WindowClient(QWidget *parent) : QMainWindow(parent), ui(new Ui::Wi
     // Exemples à supprimer
     setArticle("pommes",5.53,18,"pommes.jpg");
     ajouteArticleTablePanier("cerises",8.96,2);
+
+
+    struct sigaction A;
+    A.sa_flags = 0;
+    sigemptyset(&A.sa_mask);
+    A.sa_handler = HandlerSIGINT;
+    if (sigaction(SIGINT,&A,NULL) == -1)
+    {
+      perror("Erreur de sigaction");
+      exit(1);
+    }
 }
 
 WindowClient::~WindowClient()
@@ -273,7 +294,40 @@ void WindowClient::closeEvent(QCloseEvent *event)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonLogin_clicked()
 {
+  /*char login[50];
+  char mdp[50];
 
+  int NouveauClient = isNouveauClientChecked();
+
+  char ipServeur[] = "192.168.137.129"; 
+  int portServeur = 50000; 
+
+  int sClient = ClientSocket(ipServeur, portServeur);
+
+  if (sClient == -1) 
+  {
+      perror("Erreur de ClientSocket");
+      exit(1);
+  } 
+  else 
+  {
+      printf("Connecte sur le serveur.\n");
+      
+
+      const char* requeteConnexion = "LOGIN "; 
+      int nbEnvoyes = Send(sClient, requeteConnexion, strlen(requeteConnexion));
+
+      if (nbEnvoyes == -1) 
+      {
+         
+      } 
+      else 
+      {
+          
+      }
+  }*/
+
+  
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -316,4 +370,12 @@ void WindowClient::on_pushButtonViderPanier_clicked()
 void WindowClient::on_pushButtonPayer_clicked()
 {
 
+}
+
+void HandlerSIGINT(int s)
+{
+  printf("\nArret du client.\n");
+  //SMOP_Logout();
+  //close(sClient);
+  exit(0);
 }
