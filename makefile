@@ -7,9 +7,10 @@ LibClientQt = ClientQt
 LibSocket = Socket
 LibServeur = Serveur
 LibCreationBD = BD_Maraicher
+LIbOVESP = Serveur/OVESP
 
-COMP = g++ -I $(LibClientQt) -I $(LibSocket) -I$(LibServeur) -I $(LibCreationBD) -I/usr/include/qt5 -I/usr/include/qt5/QtWidgets -I/usr/include/qt5/QtGui -I/usr/include/qt5/QtCore
-OBJS = $(LibClientQt)/mainclient.o $(LibClientQt)/windowclient.o $(LibClientQt)/moc_windowclient.o $(LibSocket)/socket.o
+COMP = g++ -I $(LibClientQt) -I $(LibSocket) -I$(LibServeur) -I $(LibCreationBD) -I $(LIbOVESP) -I/usr/include/qt5 -I/usr/include/qt5/QtWidgets -I/usr/include/qt5/QtGui -I/usr/include/qt5/QtCore -I/usr/include/mysql -lpthread -L/usr/lib64/mysql -lmysqlclient
+OBJS = $(LibClientQt)/mainclient.o $(LibClientQt)/windowclient.o $(LibClientQt)/moc_windowclient.o $(LibSocket)/socket.o $(LIbOVESP)/OVESP.o
 
 all : Client ServeurExec CreationBD
 
@@ -20,7 +21,7 @@ Client : $(OBJS)
 ServeurExec : $(LibServeur)/Serveur.cpp
 	echo executable Serveur
 #	g++ Serveur.cpp -o Serveur $(LibSocket)/socket.o -I/usr/include/mysql -lpthread -L/usr/lib64/mysql -lmysqlclient
-	$(COMP) $< -o $@ $(LibSocket)/socket.o -I/usr/include/mysql -lpthread -L/usr/lib64/mysql -lmysqlclient
+	$(COMP) $< -o $@ $(LibSocket)/socket.o $(LIbOVESP)/OVESP.o  -I/usr/include/mysql -lpthread -L/usr/lib64/mysql -lmysqlclient
 
 CreationBD : $(LibCreationBD)/CreationBD.cpp
 	echo executable CreationBD
@@ -33,6 +34,11 @@ $(LibClientQt)/%.o : $(LibClientQt)/%.cpp
 $(LibSocket)/socket.o:   $(LibSocket)/socket.cpp $(LibSocket)/socket.h
 	echo socket.o
 	$(COMP) -c $< -o $@ -fPIC
+
+$(LIbOVESP)/OVESP.o:	$(LIbOVESP)/OVESP.cpp $(LIbOVESP)/OVESP.h
+	echo OVESP.o
+	$(COMP) -c $< -o $@ -fPIC
+
 
 clean:
 	echo suppression .o
