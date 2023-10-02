@@ -3,6 +3,7 @@
 #include <mysql.h>
 #include <time.h>
 #include <string.h>
+#include <time.h>
 
 typedef struct
 {
@@ -13,7 +14,30 @@ typedef struct
   char  image[20];
 } ARTICLE;
 
-ARTICLE Elm[] = 
+typedef struct
+{
+  int id;
+  char login[50];
+  char password[50];
+} CLIENTS;
+
+typedef struct
+{
+  int id;
+  int idClient;
+  char date[11];
+  float montant;
+  bool paye;
+} FACTURES;
+
+typedef struct
+{
+  int idFacture;
+  int idArticle;
+  int quantite;
+} VENTES;
+
+ARTICLE ElmA[] = 
 {
   {-1,"carottes",2.16f,9,"carottes.jpg"},
   {-1,"cerises",9.75f,8,"cerises.jpg"},
@@ -38,6 +62,12 @@ ARTICLE Elm[] =
   {-1,"tomates",5.49f,22,"tomates.jpg"}
 };
 
+CLIENTS ElmC[] =
+{
+  {-1, "Josue_08", "jojo17"},
+  {-1, "Cycrolle", "cycy18"}
+};
+
 int main(int argc,char *argv[])
 {
   // Connection a MySql
@@ -45,17 +75,36 @@ int main(int argc,char *argv[])
   MYSQL* connexion = mysql_init(NULL);
   mysql_real_connect(connexion,"localhost","Student","PassStudent1_","PourStudent",0,0,0);
 
-  // Creation d'une table UNIX_FINAL
   printf("Creation de la table articles...\n");
   mysql_query(connexion,"drop table articles;"); // au cas ou elle existerait deja
   mysql_query(connexion,"create table articles (id INT(4) auto_increment primary key, intitule varchar(20),prix FLOAT(4),stock INT(4),image varchar(20));");
 
-  // Ajout de tuples dans la table UNIX_FINAL
+  printf("Creation de la table clients...\n");
+  mysql_query(connexion,"drop table clients;"); // au cas ou elle existerait deja
+  mysql_query(connexion,"create table clients (id INT(4) auto_increment primary key, login varchar(50), password varchar(50));");
+
+  printf("Creation de la table factures...\n");
+  mysql_query(connexion,"drop table factures;"); // au cas ou elle existerait deja
+  mysql_query(connexion,"create table factures (id INT(4) auto_increment primary key, idClient INT(4), date varchar(11), montant FLOAT(4), paye BOOLEAN);");
+
+  printf("Creation de la table ventes... \n");
+  mysql_query(connexion,"drop table ventes;"); // au cas ou elle existerait deja
+  mysql_query(connexion,"create table ventes (idFacture INT(4), idArticle INT(4), quantite INT(4));");
+
+
+  printf("Ajout de 2 articles la table clients...\n");
+  char requete1[256];
+  for (int i=0 ; i<2 ; i++)
+  {
+    sprintf(requete1,"insert into clients values (NULL,'%s','%s');",ElmC[i].login,ElmC[i].password);
+    mysql_query(connexion,requete1);
+  }
+
   printf("Ajout de 21 articles la table articles...\n");
   char requete[256];
   for (int i=0 ; i<21 ; i++)
   {
-	  sprintf(requete,"insert into articles values (NULL,'%s',%f,%d,'%s');",Elm[i].intitule,Elm[i].prix,Elm[i].stock,Elm[i].image);
+	  sprintf(requete,"insert into articles values (NULL,'%s',%f,%d,'%s');",ElmA[i].intitule,ElmA[i].prix,ElmA[i].stock,ElmA[i].image);
 	  mysql_query(connexion,requete);
   }
 
