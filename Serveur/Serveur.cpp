@@ -4,7 +4,7 @@
 #include <string.h>
 #include <signal.h>
 #include <pthread.h>
-#include "/home/student/Documents/RtI/LaboRTI2023_sources-main/Socket/socket.h"
+#include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
 
 
 void HandlerSIGINT(int s);

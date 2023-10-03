@@ -37,6 +37,14 @@ typedef struct
   int quantite;
 } VENTES;
 
+typedef struct
+{
+  int idArticle;
+  char intitule[50];
+  int quantite;
+  float prix;
+} CADDIES;
+
 ARTICLE ElmA[] = 
 {
   {-1,"carottes",2.16f,9,"carottes.jpg"},
@@ -90,6 +98,10 @@ int main(int argc,char *argv[])
   printf("Creation de la table ventes... \n");
   mysql_query(connexion,"drop table ventes;"); // au cas ou elle existerait deja
   mysql_query(connexion,"create table ventes (idFacture INT(4), idArticle INT(4), quantite INT(4));");
+
+  printf("Creation de la table caddies... \n");
+  mysql_query(connexion,"drop table caddies;"); // au cas ou elle existerait deja
+  mysql_query(connexion,"create table caddies (idArticle INT(4), intitule varchar(50), quantite INT(4), prix FLOAT(4));");
 
 
   printf("Ajout de 2 articles la table clients...\n");
