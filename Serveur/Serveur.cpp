@@ -7,6 +7,7 @@
 #include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
 
 
+
 void HandlerSIGINT(int s);
 void TraitementConnexion(int sService);
 void* FctThreadClient(void* p);
@@ -15,10 +16,10 @@ int sEcoute;
 
 // Gestion du pool de threads
 
-#define NB_THREADS_POOL 2
-#define TAILLE_FILE_ATTENTE 20
+#define NB_THREADS_POOL 7 //client connecté en même temps
+#define TAILLE_FILE_ATTENTE 20 //client en attente de connection
 
-int socketsAcceptees[TAILLE_FILE_ATTENTE];
+int socketsAcceptees[TAILLE_FILE_ATTENTE]; //correspond au vecteur qui symbolise la file d'attente
 int indiceEcriture=0, indiceLecture=0;
 pthread_mutex_t mutexSocketsAcceptees;
 pthread_cond_t condSocketsAcceptees;
@@ -26,7 +27,7 @@ pthread_cond_t condSocketsAcceptees;
 int main(int argc,char* argv[])
 {
 
- if (argc != 2)
+ if (argc != 2) //port passé en paramètre incorrect
  {
 	 printf("Erreur...\n");
 	 printf("USAGE : Serveur portServeur\n");
@@ -38,7 +39,7 @@ int main(int argc,char* argv[])
  pthread_cond_init(&condSocketsAcceptees,NULL);
 
  for (int i=0 ; i<TAILLE_FILE_ATTENTE ; i++)
- socketsAcceptees[i] = -1;
+ socketsAcceptees[i] = -1; 
 
  // Armement des signaux
  struct sigaction A;
@@ -73,7 +74,7 @@ int main(int argc,char* argv[])
  while(1)
  {
 	 printf("Attente d'une connexion...\n");
-	 if ((sService = Accept(sEcoute,ipClient)) == -1)
+	 if ((sService = Accept(sEcoute,ipClient)) == -1) //Accept est bloquant
 	 {
 		 perror("Erreur de Accept");
 		 close(sEcoute);
@@ -108,6 +109,7 @@ void* FctThreadClient(void* p)
 	 while (indiceEcriture == indiceLecture)
 	 	pthread_cond_wait(&condSocketsAcceptees,&mutexSocketsAcceptees);
 
+	//dif = il récupère la première socket de service a l'indice indiceLecture
 	 sService = socketsAcceptees[indiceLecture];
 	 socketsAcceptees[indiceLecture] = -1;
 	 indiceLecture++;
@@ -133,7 +135,8 @@ void HandlerSIGINT(int s)
  if (socketsAcceptees[i] != -1) close(socketsAcceptees[i]);
  pthread_mutex_unlock(&mutexSocketsAcceptees);
 
- //SMOP_Close();
+ //close de la socket qu'il utilise
+ //OVESP_Close();
  exit(0);
 }
 
@@ -156,7 +159,7 @@ void TraitementConnexion(int sService)
 		 HandlerSIGINT(0);
 	 }
 
-	 // ***** Fin de connexion ? *****************
+	 // ***** Fin de connexion ? ****************
 	 if (nbLus == 0)
 	 {
 		 printf("\t[THREAD %p] Fin de connexion du client.\n",pthread_self());
@@ -168,7 +171,7 @@ void TraitementConnexion(int sService)
 	 printf("\t[THREAD %p] Requete recue = %s\n",pthread_self(),requete);
 
 	 // ***** Traitement de la requete ***********
-	 // ***** onContinue = SMOP(requete,reponse,sService);
+	 onContinue = OVESP(requete,reponse,sService);
 	 // ***** Envoi de la reponse ****************
 
 
