@@ -6,14 +6,19 @@
 #include <mysql.h>
 #include "OVESP.h"
 
+
+thread_local MYSQL* connexion;
+thread_local char requete[200];
+thread_local MYSQL_RES  *resultat;
+thread_local MYSQL_ROW  Tuple;
+
+pthread_mutex_t mutexClients = PTHREAD_MUTEX_INITIALIZER;
+
 int nbClients = 0;
-MYSQL* connexion;
-char requete[200];
-MYSQL_RES  *resultat;
-MYSQL_ROW  Tuple;
+int clients[NB_MAX_CLIENTS];
 
 bool ConnextionBd(char nomTable[20]);
-int EstPresent(int socket);
+int EstPresent(char * login);
 bool CreationDuClient(int socket, char user[50], char password[50]);
 bool MotDePasseCorrecte(char login[50], char password[50]);
 void TestArticle(int idArticle, char * reponse, bool consult);
@@ -25,6 +30,10 @@ int testTableVide();
 void HeureActuelle(char *Heure);
 bool Montant(float * montant);
 bool CreationFacture(int socket, char date[11], float montant);
+void ajoute(int socket);
+void retire(int socket);
+int idClient(char login[50], char password[50]);
+int vecteurPos(int socket);
 
 
 
@@ -41,7 +50,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
 
         char user[50], password[50], nc[1];
-        int nvClient;
+        int nvClient, varidClient;
         strcpy(user,strtok(NULL,"#"));
         strcpy(password,strtok(NULL,"#"));
         strcpy(nc, strtok(NULL, "#"));
@@ -51,28 +60,36 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
         if(nvClient == 0) //pas nouveau client
         {
-            if(EstPresent(socket) >= 0)
+            if(EstPresent(user) >= 0)
             {
                 printf("Test mot de passe.\n");
                 if(MotDePasseCorrecte(user, password))
                 {
-                    sprintf(reponse,"LOGIN#ok#Mot de passe correcte, connexion ! id : %d", socket);
+                    varidClient = idClient(user, password);
+                    if(varidClient != -1)
+                    {
+                        sprintf(reponse,"LOGIN#ok#%d", varidClient);
+                        ajoute(socket);
+                    }
+                    else
+                    {
+                        sprintf(reponse,"LOGIN#ko#Erreur de recherche client !");
+                    }
                 }
                 else
                 {
                     sprintf(reponse,"LOGIN#ko#Mot de passe incorrecte !");
-                    return false;
                 }
             }
             else
             {
-                sprintf(reponse,"LOGIN#ko#Client pas dans la bd, id = %d", socket);
-                exit(1);
+                sprintf(reponse,"LOGIN#ko#Client pas dans la bd !");
+                return false;
             }
         }
         else //nouveau client
         {
-            if(EstPresent(socket) == - 1)
+            if(EstPresent(user) == - 1)
             {
                 //ok client pas dans la bd
                 
@@ -80,7 +97,16 @@ bool OVESP(char* requete , char* reponse ,int socket)
                 //creation d'un nouveau client
                 if(CreationDuClient(socket, user, password))
                 {
-                    sprintf(reponse,"LOGIN#ok#Client créer ! id : %d", socket); //ici on demande l'id client mais si il est égual a la socket je pense que c bon
+                    varidClient = idClient(user, password);
+                    if(varidClient != -1)
+                    {
+                        sprintf(reponse,"LOGIN#ok#%d", varidClient);
+                        ajoute(socket);
+                    }
+                    else
+                    {
+                        sprintf(reponse,"LOGIN#ko#Erreur de recherche client !");
+                    }
                 }
                 else
                 {
@@ -91,8 +117,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
             else
             {
                 //client dans la bd
-                sprintf(reponse,"LOGIN#ko#Client deja dans la bd, id = %d", socket);
-                return false;
+                sprintf(reponse,"LOGIN#ko#Client deja dans la bd ! ");
             }
         }
     }
@@ -110,7 +135,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         TestArticle(id, reponse, true);
     }
 
-    if(strcmp(ptr, "ACHAT"))
+    if(strcmp(ptr, "ACHAT") == 0)
     {
         //********* ACHAT#idArticle#quantite
 
@@ -124,9 +149,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
         TestArticle(idArt, reponse, false);
 
-        if(strcmp(reponse, "ACHAT#ko#-1") == 0) //n'est pas présent
-            return false;
-
 
         char qttChar[20];
         strcpy(qttChar, strtok(NULL,"#"));
@@ -136,22 +158,20 @@ bool OVESP(char* requete , char* reponse ,int socket)
         if(AchatArticle(idArt, qtt, reponse) == -1)
         {
             sprintf(reponse,"CONSULT#ko#Erreur dans l'achat !");
-            return false;
         }
 
     }
 
-    if(strcmp(ptr, "CADDIE"))
+    if(strcmp(ptr, "CADDIE") == 0)
     {
         //**************** CADDIE
         if(!ConcatenationCaddie(reponse))
         {
             sprintf(reponse,"CADDIE#ko#Erreur dans le caddie !");
-            return false;
         }
     }
 
-    if(strcmp(ptr, "CANCEL"))
+    if(strcmp(ptr, "CANCEL") == 0)
     {
         // ************* CANCEL#idArticle
             
@@ -162,7 +182,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
         if(!CancelArticle(idArt1))
         {
             sprintf(reponse,"CANCEL#ko");
-            return false;
         }
         else
         {
@@ -170,7 +189,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         }
     }
 
-    if(strcmp(ptr, "CANCELALL"))
+    if(strcmp(ptr, "CANCELALL") == 0)
     {
         // ************* CANCELALL
 
@@ -180,7 +199,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
         if(!CancelAll(tab, 5))
         {
             fprintf(stderr, "Erreur dans la recuperation de idArticle !\n");
-            return false;
         }
 
         // on retire les éléments de caddie et on met a jour la table article
@@ -191,7 +209,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
             if(!CancelArticle(tab[i]))
             {
                 fprintf(stderr,"Erreur de cancelall !\n");
-                return false; 
             }
         }
 
@@ -199,7 +216,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
     }
 
-    if(strcmp(ptr, "CONFIRMER"))
+    if(strcmp(ptr, "CONFIRMER") == 0)
     {
         // ************* CONFIRMER
 
@@ -214,20 +231,18 @@ bool OVESP(char* requete , char* reponse ,int socket)
         if(!Montant(&montant))
         {
             fprintf(stderr,"Erreur dans le calcule du montant !\n");
-            return false;
         }
 
         //création de la facture
         if(!CreationFacture(socket, date, montant))
         {
             fprintf(stderr,"Erreur dans la creation de facture !\n");
-            return false;
         }
 
 
     }
 
-    if(strcmp(ptr, "LOGOUT"))
+    if(strcmp(ptr, "LOGOUT") == 0)
     {
         // ************* LOGOUT
         int nbTupleCaddie = testTableVide();
@@ -241,7 +256,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
             if(!CancelAll(tab1, 5))
             {
                 fprintf(stderr, "Erreur dans la recuperation de idArticle 1 !\n");
-                return false;
             }
 
             // on retire les éléments de caddie et on met a jour la table article
@@ -251,7 +265,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
                 if(!CancelArticle(tab1[i]))
                 {
                     fprintf(stderr,"Erreur de cancelall 1 !\n");
-                    return false;
                 }
             }
 
@@ -265,13 +278,71 @@ bool OVESP(char* requete , char* reponse ,int socket)
         {
             //erreur
             fprintf(stderr,"Erreur de count !\n");
-            return false;  
         }
+        retire(socket);
 
+        return false;
 
     }
 
     return true;
+}
+
+int idClient(char login[50], char password[50])
+{
+    int idClient = -1;
+    connexion = mysql_init(NULL);
+    
+    char nomTable[20];
+    strcpy(nomTable, "clients");
+    if(!ConnextionBd(nomTable))
+    {
+        fprintf(stderr, "Erreur de mysql connexion clients: %s\n",mysql_error(connexion));
+        return -1;
+    }
+
+    while ((Tuple = mysql_fetch_row(resultat)) != NULL)
+    {
+        if(Tuple != NULL && strcmp(Tuple[1], login) == 0)
+        {
+            idClient = atoi(Tuple[0]);
+            break;
+        }
+    }
+
+    mysql_close(connexion);
+    printf("Id client : %d\n", idClient);
+    return idClient;
+}
+
+void ajoute(int socket)
+{
+    pthread_mutex_lock(&mutexClients);
+    clients[nbClients] = socket;
+    nbClients++;
+    pthread_mutex_unlock(&mutexClients);
+    printf("socket %d ajoute\n", socket);
+}
+
+void retire(int socket)
+{
+    int pos = vecteurPos(socket);
+    if (pos == -1) return;
+    pthread_mutex_lock(&mutexClients);
+    for (int i=pos ; i<=nbClients-2 ; i++)
+    clients[i] = clients[i+1];
+    nbClients--;
+    pthread_mutex_unlock(&mutexClients);
+}
+
+int vecteurPos(int socket)
+{
+ int indice = -1;
+ pthread_mutex_lock(&mutexClients);
+ for(int i=0 ; i<nbClients ; i++)
+ if (clients[i] == socket) { indice = i; break; }
+ pthread_mutex_unlock(&mutexClients);
+ return indice;
 }
 
 bool ConnextionBd(char nomTable[20])
@@ -304,7 +375,7 @@ bool ConnextionBd(char nomTable[20])
 }
 
 
-int EstPresent(int socket)
+int EstPresent(char * login)
 {
     int indice = -1;
 
@@ -316,11 +387,12 @@ int EstPresent(int socket)
         exit(1);
     }
 
+
     while ((Tuple = mysql_fetch_row(resultat)) != NULL)
     {
-        if(Tuple != NULL && atoi(Tuple[0]) == socket)
+        if(Tuple != NULL && (strcmp(Tuple[1], login) == 0))
         {
-            indice = socket; break;
+            indice = atoi(Tuple[0]); break;
         }
     }
 
@@ -353,7 +425,7 @@ bool MotDePasseCorrecte(char login[50], char password[50])
     }
 
     mysql_close(connexion);
-    return resultat;
+    return result;
 }
 
 bool CreationDuClient(int socket, char user[50], char password[50])
@@ -398,11 +470,11 @@ void TestArticle(int idArticle, char * reponse, bool consult)
         {
             if(consult)
             {
-                sprintf(reponse,"CONSULT#ok#id = %d, intitule = '%s', prix = %f, stock = %d, image = '%s'", Tuple[0], Tuple[1], Tuple[2], Tuple[3], Tuple[4]);
+                sprintf(reponse,"CONSULT#ok#%d#%s#%f#%d#%s", atoi(Tuple[0]), Tuple[1], atof(Tuple[2]), atoi(Tuple[3]), Tuple[4]);
             }
             else
             {
-                sprintf(reponse,"ACHAT#ok#id = %d, intitule = '%s', prix = %f, stock = %d, image = '%s'", Tuple[0], Tuple[1], Tuple[2], Tuple[3], Tuple[4]);
+                sprintf(reponse,"CONSULT#ok#%d#%s#%f#%d#%s", atoi(Tuple[0]), Tuple[1], atof(Tuple[2]), atoi(Tuple[3]), Tuple[4]);
             }
             break;
         }

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <signal.h>
 #include <pthread.h>
+#include "OVESP.h"
 #include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
 
 
@@ -70,6 +71,7 @@ int main(int argc,char* argv[])
  // Mise en boucle du serveur
  int sService;
  char ipClient[50];
+ int i = 0;
  printf("Demarrage du serveur.\n");
  while(1)
  {
@@ -173,8 +175,7 @@ void TraitementConnexion(int sService)
 	 // ***** Traitement de la requete ***********
 	 onContinue = OVESP(requete,reponse,sService);
 	 // ***** Envoi de la reponse ****************
-
-
+	 
 	 if ((nbEcrits = Send(sService,reponse,strlen(reponse))) < 0)
 	 {
 		 perror("Erreur de Send");
@@ -187,5 +188,6 @@ void TraitementConnexion(int sService)
 	 if (!onContinue) 
 	 	printf("\t[THREAD %p] Fin de connexion de la socket %d\n",pthread_self(),sService);
  }
+
 }
 

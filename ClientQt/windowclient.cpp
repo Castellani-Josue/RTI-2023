@@ -1,12 +1,18 @@
 #include "windowclient.h"
 #include "ui_windowclient.h"
+#include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
+#include <unistd.h>
 #include <QMessageBox>
 #include <string>
+#include <stdio.h>
+#include <stdlib.h>
 using namespace std;
 
 extern WindowClient *w;
 
-#define REPERTOIRE_IMAGES "images/"
+#define REPERTOIRE_IMAGES "/home/student/Bureau/UNIX/LaboUnix2022_Tache_Finale/images/"
+
+bool OVESP_Login(char *, char *, int, int);
 
 WindowClient::WindowClient(QWidget *parent) : QMainWindow(parent), ui(new Ui::WindowClient)
 {
@@ -273,7 +279,162 @@ void WindowClient::closeEvent(QCloseEvent *event)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonLogin_clicked()
 {
+    char login[50];
+    char mdp[50];
+    int NouveauClient = isNouveauClientChecked();
 
+    strcpy(login, w->getNom());
+    strcpy(mdp, w->getMotDePasse());
+
+    char ipServeur[] = "192.168.146.128"; 
+    int portServeur = 50000; 
+
+    int sClient = ClientSocket(ipServeur, portServeur);
+
+    if (sClient == -1) 
+    {
+        perror("Erreur de ClientSocket");
+        exit(1);
+    } 
+    else 
+    {
+        printf("Connecte sur le serveur.\n");
+      
+        if(!OVESP_Login(login, mdp, NouveauClient, sClient))
+        {
+          perror("Erreur dans OVESP_Login");
+          exit(1);
+        }
+    }
+}
+
+bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
+{
+  //LOGIN#log#MDP#nvclient
+
+  bool onContinue = true;
+  char requete[200],reponse[200];
+
+
+  // ***** Construction de la requete *********************
+  sprintf(requete,"LOGIN#%s#%s#%d", user, password, NouveauClient);
+
+  // ***** Envoi requete + réception réponse **************
+
+  int nbEcrits, nbLus;
+
+  // ***** Envoi de la requete ****************************
+
+  if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+  {
+   perror("Erreur de Send");
+   close(sClient);
+   exit(1);
+  }
+
+  // ***** Attente de la reponse **************************
+  if ((nbLus = Receive(sClient,reponse)) < 0)
+  {
+   perror("Erreur de Receive");
+   close(sClient);
+   exit(1);
+  }
+
+  if (nbLus == 0)
+  {
+   printf("Serveur arrete, pas de reponse reçue...\n");
+   close(sClient);
+   exit(1);
+  }
+
+  // ***** Parsing de la réponse **************************
+  char *ptr = strtok(reponse,"#"); //login
+  ptr = strtok(NULL,"#"); // statut = ok ou ko
+
+
+  if (strcmp(ptr,"ok") == 0)
+  {
+    ptr = strtok(NULL,"#"); 
+    printf("Résultat = %s\n",ptr); 
+    w->loginOK();
+
+    sprintf(requete,"CONSULT#1");
+
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+     perror("Erreur de Send");
+     close(sClient);
+     exit(1);
+    }
+
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+     perror("Erreur de Receive");
+     close(sClient);
+     exit(1);
+    }
+
+    ptr = strtok(reponse,"#"); //consult
+    ptr = strtok(NULL,"#"); // statut = ok ou ko
+
+    if(strcmp(ptr,"ok") == 0)
+    {
+      int id, stock;
+      char intitule[20], image[20];
+      float prix;
+
+      ptr = strtok(NULL,"#"); 
+      //id
+      id = atoi(ptr);
+      ptr = strtok(NULL,"#"); 
+      //intitule
+      strcpy(intitule, ptr);
+      ptr = strtok(NULL,"#"); 
+
+      //prix
+      char tmp[10];
+      strcpy(tmp, ptr);
+      int longueur = strlen(ptr);
+      for (int i = 0; i < longueur; i++) 
+      {
+          if(tmp[i] == '.') 
+          {
+              tmp[i] = ','; 
+          }
+      }
+      prix = atof(tmp);
+
+      ptr = strtok(NULL,"#"); 
+      //stock
+      stock = atoi(ptr);
+      ptr = strtok(NULL,"#"); 
+      //image
+      strcpy(image, ptr);
+
+
+      printf("id = %d\n", id);
+      printf("intitule = %s\n", intitule);
+      printf("prix = %f\n", prix);
+      printf("stock = %d\n", stock);
+      printf("image = %s\n", image);
+
+      w->setArticle(intitule, prix, stock, image);
+    }
+    else
+    {
+      ptr = strtok(NULL,"#"); 
+      printf("Erreur: %s\n",ptr);
+      onContinue = false;
+    }
+  }
+  else
+  {
+    ptr = strtok(NULL,"#"); 
+    printf("Erreur: %s\n",ptr);
+    onContinue = false;
+  }
+
+  return onContinue;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////

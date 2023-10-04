@@ -1,7 +1,7 @@
 #ifndef OVESP_H
 #define OVESP_H
 
-#define NB_MAX_CLIENTS 5
+#define NB_MAX_CLIENTS 7
 
 
 bool OVESP(char* requete,char* reponse, int socket);
