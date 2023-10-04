@@ -3,21 +3,44 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
+#include <cstring>
 
 
-#include "LibraireSocket.h"
+#include "socket.h"
 
+/*struct sockaddr_in {
+ sa_family_t sin_family; // Famille d'adresses (AF_INET)
+ in_port_t sin_port; // Numéro de port
+ struct in_addr sin_addr; // Adresse IP
+ char sin_zero[8]; // Remplissage pour alignement
+};
+
+struct in_addr {
+ in_addr_t s_addr; // Adresse IP en format réseau
+};
+
+struct addrinfo {
+ int ai_flags;
+ int ai_family;
+ int ai_socktype;
+ int ai_protocol;
+ socklen_t ai_addrlen;
+ struct sockaddr ai_addr;
+ charai_canonname;
+ struct addrinfo *ai_next;
+};*/
 
 int ServerSocket(int port)
 {
 	//création socket
-	int socket;
-	if((socket = socket(AS_INET, SOCK_STREAM, 0)) == -1)
+	int s;
+	if ((s = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 	{
 		perror("Erreur de creation de socket.");
 		exit(1);
 	}
-	printf("Création de socket réussie : %d", socket); 
+	printf("Création de socket réussie : %d", s); 
 
 	//construction de l'addresse réseau de la socket
  	struct addrinfo hints;
@@ -28,13 +51,13 @@ int ServerSocket(int port)
 	hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV; // pour une connexion passive
 	if (getaddrinfo(NULL,"50000",&hints,&results) != 0)
 	{
-		close(socket);
+		close(s);
 		perror("Echec de la création de l'adr reseau.");
 		exit(1);
 	} 
 
 	// Liaison de la socket à l'adresse
-	if (bind(socket,results->ai_addr,results->ai_addrlen) < 0)
+	if (bind(s,results->ai_addr,results->ai_addrlen) < 0)
 	{
 		perror("Erreur de bind()");
 		exit(1);
@@ -43,7 +66,7 @@ int ServerSocket(int port)
 	//libération ? ? 
 	freeaddrinfo(results);
 	printf("bind() reussi !\n");
-	return socket;
+	return s;
 }
 
 int Accept(int socket,char *ipClient)
@@ -56,53 +79,80 @@ int Accept(int socket,char *ipClient)
 		exit(1);
 	}
 	printf("listen() reussi !\n");
+	struct sockaddr adrClient;
+	
+	socklen_t adrClientLen =sizeof(adrClient); 
 
 	// Attente d'une connexion BLOQUANT
 	int socketServ;
-	if ((socketServ = accept(socket,NULL,NULL)) == -1)
+	if ((socketServ = accept(socket,&adrClient,&adrClientLen)) == -1)
 	{
 		perror("Erreur de accept()");
 		exit(1);
 	}
 
-	printf("accept() reussi !");
+	printf("accept() reussi !\n");
 	printf("socket de service = %d\n",socketServ);
+
+	// Recuperation d'information sur le client connecte
+
+	//char host[NI_MAXHOST];
+	char port[NI_MAXSERV];
+	//struct sockaddr_in adrClient;
+	//struct sockaddr adrClient;
+	
+	//socklen_t adrClientLen =sizeof(adrClient); 
+	
+	//getpeername(socketServ,(struct sockaddr*)&adrClient,&adrClientLen);
+	
+	getnameinfo(&adrClient,adrClientLen,ipClient,NI_MAXHOST,port,NI_MAXSERV,NI_NUMERICSERV | NI_NUMERICHOST);
+	/*getnameinfo((struct sockaddr*)&adrClient,adrClientLen,
+				host,NI_MAXHOST,
+				port,NI_MAXSERV,
+				NI_NUMERICSERV | NI_NUMERICHOST);*/
+
+	
+	//printf("host : %s\n",*host);
+	//strcpy(ipClient, host);
+	
+	
+
+	printf("Client connecte --> Adresse IP: %s -- Port: %s\n",ipClient, port);
 
 	return socketServ;
 }
 
 int ClientSocket(char* ipServeur,int portServeur)
 {
-	int socket;
-	if((socketC = socket(AS_INET, SOCK_STREAM, 0)) == -1)
+	int s;
+	if((s = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 	{
 		perror("Erreur de creation de socket.");
 		exit(1);
 	}
-	printf("Création de socket réussie : %d", socketC); 
-
+	printf("Création de socket réussie : %d", s); 
 	// Construction de l'adresse du serveur
-	struct addrinfo hints;
+	struct addrinfo myAddrInfo; // Déclare une variable de type struct addrinfo
 	struct addrinfo *results;
-	memset(&hints,0,sizeof(struct addrinfo));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_NUMERICSERV;
+	memset(&myAddrInfo,0,sizeof(struct addrinfo));
+	myAddrInfo.ai_family = AF_INET;
+	myAddrInfo.ai_socktype = SOCK_STREAM;
+	myAddrInfo.ai_flags = AI_NUMERICSERV;
 
-	if (getaddrinfo(argv[1],argv[2],&hints,&results) != 0)
+	if (getaddrinfo(NULL,"50000",&myAddrInfo,&results) != 0)
 	{
-		perror("Echec de la création de l'adr du serveur.")
+		perror("Echec de la création de l'adr du serveur.");
 		exit(1);
 	}
 
 	// Demande de connexion
-	if (connect(socketC,results->ai_addr,results->ai_addrlen) == -1)
+	if (connect(s,results->ai_addr,results->ai_addrlen) == -1)
 	{
 		perror("Erreur de connect()");
 		exit(1);
 	}
 	printf("connect() reussi !\n");
-	return socketC;
+	return s;
 
 }
 
