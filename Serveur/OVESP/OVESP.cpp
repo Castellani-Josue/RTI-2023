@@ -17,6 +17,8 @@ pthread_mutex_t mutexClients = PTHREAD_MUTEX_INITIALIZER;
 int nbClients = 0;
 int clients[NB_MAX_CLIENTS];
 
+
+
 bool ConnextionBd(char nomTable[20]);
 int EstPresent(char * login);
 bool CreationDuClient(int socket, char user[50], char password[50]);
@@ -93,7 +95,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
             {
                 //ok client pas dans la bd
                 
-                printf("Client non créer !\n");                
+                printf("Creation Client !\n");                
                 //creation d'un nouveau client
                 if(CreationDuClient(socket, user, password))
                 {
