@@ -1,6 +1,6 @@
 #include "windowclient.h"
 #include "ui_windowclient.h"
-#include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
+#include "../Socket/socket.h"
 #include <unistd.h>
 #include <QMessageBox>
 #include <string>
@@ -10,9 +10,13 @@ using namespace std;
 
 extern WindowClient *w;
 
-#define REPERTOIRE_IMAGES "/home/student/Bureau/UNIX/LaboUnix2022_Tache_Finale/images/"
+#define REPERTOIRE_IMAGES "/home/student/Documents/Unix2023/images/"
 
 bool OVESP_Login(char *, char *, int, int);
+
+
+int idArticleEnCours;
+int sClient;
 
 WindowClient::WindowClient(QWidget *parent) : QMainWindow(parent), ui(new Ui::WindowClient)
 {
@@ -36,8 +40,8 @@ WindowClient::WindowClient(QWidget *parent) : QMainWindow(parent), ui(new Ui::Wi
     setPublicite("!!! Bienvenue sur le Maraicher en ligne !!!");
 
     // Exemples à supprimer
-    setArticle("pommes",5.53,18,"pommes.jpg");
-    ajouteArticleTablePanier("cerises",8.96,2);
+    //setArticle("pommes",5.53,18,"pommes.jpg");
+    //ajouteArticleTablePanier("cerises",8.96,2);
 }
 
 WindowClient::~WindowClient()
@@ -286,10 +290,10 @@ void WindowClient::on_pushButtonLogin_clicked()
     strcpy(login, w->getNom());
     strcpy(mdp, w->getMotDePasse());
 
-    char ipServeur[] = "192.168.146.128"; 
+    char ipServeur[] = "192.168.137.129"; 
     int portServeur = 50000; 
 
-    int sClient = ClientSocket(ipServeur, portServeur);
+    sClient = ClientSocket(ipServeur, portServeur);
 
     if (sClient == -1) 
     {
@@ -357,6 +361,7 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
     ptr = strtok(NULL,"#"); 
     printf("Résultat = %s\n",ptr); 
     w->loginOK();
+    w->dialogueMessage("Login","Login reussi !");
 
     sprintf(requete,"CONSULT#1");
 
@@ -379,6 +384,7 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
 
     if(strcmp(ptr,"ok") == 0)
     {
+      idArticleEnCours = 1;
       int id, stock;
       char intitule[20], image[20];
       float prix;
@@ -432,6 +438,7 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
     ptr = strtok(NULL,"#"); 
     printf("Erreur: %s\n",ptr);
     onContinue = false;
+     w->dialogueMessage("Login","Erreur de Login  !");
   }
 
   return onContinue;
@@ -440,21 +447,205 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonLogout_clicked()
 {
+    char requete[200],reponse[200];
+    int nbEcrits, nbLus;
 
+   
+    // ***** Construction de la requete *********************
+    sprintf(requete,"LOGOUT");
+    // ***** Envoi requete  *********************************
+
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    // ***** Attente de la reponse **************************
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    /*if (nbLus == 0)
+    {
+      printf("Serveur arrete, pas de reponse reçue...\n");
+      ::close(sClient);
+      exit(1);
+    }*/
+    w->dialogueMessage("LOGOUT","Logout reussi !");
+    w->logoutOK();
+    
+  
+    
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonSuivant_clicked()
 {
+    char requete[200],reponse[200];
+    int nbEcrits, nbLus;
 
+    if(idArticleEnCours==21)
+    {
+      w->dialogueErreur("CONSULT","Pas d'article suivant !");
+    }
+    else
+    {
+      printf("IDTEST : %d\n",idArticleEnCours);
+      idArticleEnCours++;
+      sprintf(requete,"CONSULT#%d",idArticleEnCours);
+
+
+      if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+      {
+       perror("Erreur de Send");
+       ::close(sClient);
+       exit(1);
+      }
+
+      if ((nbLus = Receive(sClient,reponse)) < 0)
+      {
+       perror("Erreur de Receive");
+       ::close(sClient);
+       exit(1);
+      }
+
+      char* ptr = strtok(reponse,"#"); //consult
+      ptr = strtok(NULL,"#"); // statut = ok ou ko
+
+      if(strcmp(ptr,"ok") == 0)
+      {
+
+        int id, stock, ptrLecture = 0, ptrEcriture = 0;
+        char intitule[20], image[20], imageTmp[20];
+        float prix;
+
+        ptr = strtok(NULL,"#"); 
+        //id
+        id = atoi(ptr);
+        ptr = strtok(NULL,"#"); 
+        //intitule
+        strcpy(intitule, ptr);
+        ptr = strtok(NULL,"#"); 
+
+        //prix
+        char tmp[10];
+        strcpy(tmp, ptr);
+        int longueur = strlen(ptr);
+        for (int i = 0; i < longueur; i++) 
+        {
+            if(tmp[i] == '.') 
+            {
+                tmp[i] = ','; 
+            }
+        }
+        prix = atof(tmp);
+
+        ptr = strtok(NULL,"#"); 
+        //stock
+        stock = atoi(ptr);
+        ptr = strtok(NULL,"#"); 
+        //image
+        ptr = strtok(ptr, "."); //ici on fait ça pour évité les caractère spéciaux qu'il y a en fin de chaine
+        strcpy(image, ptr);
+        strcat(image, ".jpg");
+
+        printf("id = %d\n", id);
+        printf("intitule = %s\n", intitule);
+        printf("prix = %f\n", prix);
+        printf("stock = %d\n", stock);
+        printf("image = %s\n", image);
+
+        w->setArticle(intitule, prix, stock, image);
+      }
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonPrecedent_clicked()
 {
+  char requete[200],reponse[200];
+    int nbEcrits, nbLus;
 
+    if(idArticleEnCours==1)
+    {
+      w->dialogueErreur("CONSULT","Pas d'article précédant !");
+    }
+    else
+    {
+      printf("IDTEST : %d\n",idArticleEnCours);
+      idArticleEnCours--;
+      sprintf(requete,"CONSULT#%d",idArticleEnCours);
+
+
+      if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+      {
+       perror("Erreur de Send");
+       ::close(sClient);
+       exit(1);
+      }
+
+      if ((nbLus = Receive(sClient,reponse)) < 0)
+      {
+       perror("Erreur de Receive");
+       ::close(sClient);
+       exit(1);
+      }
+
+      char* ptr = strtok(reponse,"#"); //consult
+      ptr = strtok(NULL,"#"); // statut = ok ou ko
+
+      if(strcmp(ptr,"ok") == 0)
+      {
+
+        int id, stock, ptrLecture = 0, ptrEcriture = 0;
+        char intitule[20], image[20], imageTmp[20];
+        float prix;
+
+        ptr = strtok(NULL,"#"); 
+        //id
+        id = atoi(ptr);
+        ptr = strtok(NULL,"#"); 
+        //intitule
+        strcpy(intitule, ptr);
+        ptr = strtok(NULL,"#"); 
+
+        //prix
+        char tmp[10];
+        strcpy(tmp, ptr);
+        int longueur = strlen(ptr);
+        for (int i = 0; i < longueur; i++) 
+        {
+            if(tmp[i] == '.') 
+            {
+                tmp[i] = ','; 
+            }
+        }
+        prix = atof(tmp);
+
+        ptr = strtok(NULL,"#"); 
+        //stock
+        stock = atoi(ptr);
+        ptr = strtok(NULL,"#"); 
+        //image
+        ptr = strtok(ptr, "."); //ici on fait ça pour évité les caractère spéciaux qu'il y a en fin de chaine
+        strcpy(image, ptr);
+        strcat(image, ".jpg");
+
+        printf("id = %d\n", id);
+        printf("intitule = %s\n", intitule);
+        printf("prix = %f\n", prix);
+        printf("stock = %d\n", stock);
+        printf("image = %s\n", image);
+
+        w->setArticle(intitule, prix, stock, image);
+      }
+    }
 }
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonAcheter_clicked()
 {
