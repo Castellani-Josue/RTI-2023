@@ -12,7 +12,7 @@ typedef struct
   float prix;
   int   stock;  
   char  image[20];
-} ARTICLE;
+} ARTICLES;
 
 typedef struct
 {
@@ -40,12 +40,12 @@ typedef struct
 typedef struct
 {
   int idArticle;
-  char intitule[50];
+  char intitule[20];
   int quantite;
   float prix;
 } CADDIES;
 
-ARTICLE ElmA[] = 
+ARTICLES ElmA[] = 
 {
   {-1,"carottes",2.16f,9,"carottes.jpg"},
   {-1,"cerises",9.75f,8,"cerises.jpg"},

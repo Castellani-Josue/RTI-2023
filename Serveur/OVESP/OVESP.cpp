@@ -17,8 +17,6 @@ pthread_mutex_t mutexClients = PTHREAD_MUTEX_INITIALIZER;
 int nbClients = 0;
 int clients[NB_MAX_CLIENTS];
 
-
-
 bool ConnextionBd(char nomTable[20]);
 int EstPresent(char * login);
 bool CreationDuClient(int socket, char user[50], char password[50]);
@@ -36,7 +34,7 @@ void ajoute(int socket);
 void retire(int socket);
 int idClient(char login[50], char password[50]);
 int vecteurPos(int socket);
-
+float ConvertionFloat(char * chiffre);
 
 
 //***** Parsing de la requete et creation de la reponse *************
@@ -95,7 +93,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
             {
                 //ok client pas dans la bd
                 
-                printf("Creation Client !\n");                
+                printf("Client non créer !\n");                
                 //creation d'un nouveau client
                 if(CreationDuClient(socket, user, password))
                 {
@@ -142,8 +140,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
         //********* ACHAT#idArticle#quantite
 
         //test si article présent 
-
-        strcpy(reponse, "ACHAT#ko#-1"); //non trouvé par défaut
 
         char idChar1[20];
         strcpy(idChar1,strtok(NULL,"#"));
@@ -488,6 +484,7 @@ void TestArticle(int idArticle, char * reponse, bool consult)
 int AchatArticle(int idArticle, int quantite, char * reponse)
 {
     int res = 1;
+    bool present = false;
     connexion = mysql_init(NULL);
 
     char nomTable[20];
@@ -503,34 +500,54 @@ int AchatArticle(int idArticle, int quantite, char * reponse)
     {
         if(Tuple != NULL && atoi(Tuple[0]) == idArticle)
         {
-            if(atoi(Tuple[3]) <= quantite)
+            present = true;
+            if(atoi(Tuple[3]) < quantite)
             {
                 //pas assez de qtt
-                sprintf(reponse,"ACHAT#ok#id = %d, quantite = 0, prix = %f", Tuple[0],  Tuple[2]); 
+                sprintf(reponse,"ACHAT#ko#id = %d, quantite = 0, prix = %f", atoi(Tuple[0]),  ConvertionFloat(Tuple[2])); 
             }
             else
             {
                 printf("Supression de %d %s\n", quantite, Tuple[1]);
-                Tuple[3] = Tuple[3] - quantite;
+                int stock = atoi(Tuple[3]) - quantite;
 
                 char requeteTmp[256];
-                sprintf(requeteTmp, "UPDATE articles SET qtt = %d WHERE id = %d", Tuple[3], idArticle);
+                sprintf(requeteTmp, "UPDATE articles SET stock = %d WHERE id = %d", stock, idArticle);
 
+                //sprintf(requeteTmp, "UPDATE articles SET stock = %d WHERE id = %d", 9, 1);
                 if (mysql_query(connexion, requeteTmp) == 0)
                 {
-                    printf("Quantité mise à jour avec succès.\n");
-                    sprintf(reponse,"ACHAT#ok#id = %d, quantite = %f, prix = %f", Tuple[0], Tuple[3],Tuple[2]);
+                    
+                    strcpy(nomTable, "articles");
 
-
-                    //sauvegarde dans le caddie
-
-                    sprintf(requeteTmp, "INSERT INTO caddies VALUES (%d, '%s', %d, %f)", idArticle, Tuple[1], quantite, Tuple[2]);
-
-                    if (mysql_query(connexion, requeteTmp) == 0)
+                    if(!ConnextionBd(nomTable))
                     {
-                        printf("Succès de la sauvegarde dans le caddie.\n");
+                        fprintf(stderr, "Erreur de mysql connexion articles: %s\n",mysql_error(connexion));
+                        exit(1);     
                     }
 
+                    while ((Tuple = mysql_fetch_row(resultat)) != NULL)
+                    {
+                        if(Tuple != NULL && atoi(Tuple[0]) == idArticle)
+                        {
+                            float prix = ConvertionFloat(Tuple[2]);
+                            prix = prix * (float)quantite;
+
+
+                            printf("Quantité mise à jour avec succès.\n");
+                            sprintf(reponse,"ACHAT#ok#id = %d, quantite = %d, prix = %f", idArticle, quantite, prix);
+
+
+                            //sauvegarde dans le caddie
+
+                            sprintf(requeteTmp, "INSERT INTO caddies VALUES (%d, '%s', %d, %f)", idArticle, Tuple[1], quantite, prix);
+
+                            if (mysql_query(connexion, requeteTmp) == 0)
+                            {
+                                printf("Succès de la sauvegarde dans le caddie.\n");
+                            }
+                        }
+                    }
                 } 
                 else 
                 {
@@ -540,6 +557,10 @@ int AchatArticle(int idArticle, int quantite, char * reponse)
             }
             break;
         }
+    }
+    if(!present)
+    {
+        sprintf(reponse, "ACHAT#ko#-1"); //non trouvé
     }
 
     mysql_close(connexion);
@@ -566,7 +587,7 @@ bool ConcatenationCaddie(char * reponse)
         char *occurrence = (char *)malloc(256); // Vous pouvez ajuster la taille selon vos besoins
 
         // Utilisez snprintf pour copier les données dans la mémoire allouée
-        sprintf(occurrence, "%d, %s, %d, %f\n", atoi(Tuple[0]), Tuple[1], atoi(Tuple[2]), atof(Tuple[3]));
+        sprintf(occurrence, "%d,%s,%d,%f#", atoi(Tuple[0]), Tuple[1], atoi(Tuple[2]), atof(Tuple[3]));
 
 
         // Stockez le pointeur vers la mémoire allouée dans le tableau
@@ -574,6 +595,9 @@ bool ConcatenationCaddie(char * reponse)
 
         i++;
     }
+
+    int longueur = strlen (reponse);
+    reponse[longueur-1] = '\0';
 
     mysql_close(connexion);
     return true;
@@ -771,4 +795,19 @@ bool CreationFacture(int socket, char date[11], float montant)
     mysql_close(connexion);
     return true;
 }
+float ConvertionFloat(char * chiffre)
+{
+    // int longueur = strlen(chiffre);
 
+    // for (int i = 0; i < longueur; i++) 
+    // {
+    //     if(chiffre[i] == '.') 
+    //     {
+    //         chiffre[i] = ','; 
+    //     }
+    // }
+    float prix = atof(chiffre);
+    printf("chiffre : %s\n", chiffre);
+    printf("prix encore : %f\n", prix);
+    return prix;
+}

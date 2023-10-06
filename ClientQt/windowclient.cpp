@@ -1,6 +1,6 @@
 #include "windowclient.h"
 #include "ui_windowclient.h"
-#include "../Socket/socket.h"
+#include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
 #include <unistd.h>
 #include <QMessageBox>
 #include <string>
@@ -10,13 +10,15 @@ using namespace std;
 
 extern WindowClient *w;
 
-#define REPERTOIRE_IMAGES "/home/student/Documents/Unix2023/images/"
+int sClient;
+int idArticleEnCours;
+float TotCaddie = 0.0;
+
+#define REPERTOIRE_IMAGES "/home/student/Bureau/RTI-2023-main/ClientQt/images/"
 
 bool OVESP_Login(char *, char *, int, int);
+int compterOccurrences(char *chaine, char caractere);
 
-
-int idArticleEnCours;
-int sClient;
 
 WindowClient::WindowClient(QWidget *parent) : QMainWindow(parent), ui(new Ui::WindowClient)
 {
@@ -38,10 +40,6 @@ WindowClient::WindowClient(QWidget *parent) : QMainWindow(parent), ui(new Ui::Wi
 
     ui->pushButtonPayer->setText("Confirmer achat");
     setPublicite("!!! Bienvenue sur le Maraicher en ligne !!!");
-
-    // Exemples à supprimer
-    //setArticle("pommes",5.53,18,"pommes.jpg");
-    //ajouteArticleTablePanier("cerises",8.96,2);
 }
 
 WindowClient::~WindowClient()
@@ -290,7 +288,7 @@ void WindowClient::on_pushButtonLogin_clicked()
     strcpy(login, w->getNom());
     strcpy(mdp, w->getMotDePasse());
 
-    char ipServeur[] = "192.168.137.129"; 
+    char ipServeur[] = "192.168.146.128"; 
     int portServeur = 50000; 
 
     sClient = ClientSocket(ipServeur, portServeur);
@@ -447,7 +445,7 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonLogout_clicked()
 {
-    char requete[200],reponse[200];
+  char requete[200],reponse[200];
     int nbEcrits, nbLus;
 
    
@@ -470,17 +468,9 @@ void WindowClient::on_pushButtonLogout_clicked()
       exit(1);
     }
 
-    /*if (nbLus == 0)
-    {
-      printf("Serveur arrete, pas de reponse reçue...\n");
-      ::close(sClient);
-      exit(1);
-    }*/
+    
     w->dialogueMessage("LOGOUT","Logout reussi !");
     w->logoutOK();
-    
-  
-    
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -646,12 +636,155 @@ void WindowClient::on_pushButtonPrecedent_clicked()
       }
     }
 }
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonAcheter_clicked()
 {
+  //********* ACHAT#idArticle#quantite
+    char requete[200],reponse[200];
+    int nbEcrits, nbLus;
 
+    sprintf(requete, "ACHAT#%d#%d", idArticleEnCours, w->getQuantite());
+
+
+    //envoie - réception
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    char * reponsepars;
+    reponsepars = strtok(reponse, "#");
+    reponsepars = strtok(NULL, "#");
+
+    if (strcmp(reponsepars, "ko") == 0)
+    {
+      perror("Erreur de la requête achat ");
+      reponsepars = strtok(NULL, "#");
+      printf("Erreur : %s\n", reponsepars);
+      return;
+    }
+
+
+    //**************** CADDIE
+
+    //mise a jour du caddie
+
+    sprintf(requete, "CADDIE");
+
+    //envoie - réception
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    int occurrences = compterOccurrences(reponse, '#');
+    occurrences--; //ici on fait -- parce que il y a 1 # en trop dans la réponse pour savoir le nombre d'élément dans caddie
+
+    char * parsing = strtok(reponse, "#");
+    char * tmp;
+
+    //ok ou ko
+    parsing = strtok(NULL, "#");
+
+    char * tab[5];
+    if(strcmp(parsing, "ok") == 0)
+    {
+      printf("%d\n", occurrences);
+      for(int i = 0; i<occurrences ;i++)
+      {
+        parsing = strtok(NULL, "#");
+          strcpy(tab[i], parsing);
+
+          printf("%s\n", parsing);
+      }
+
+
+
+      //%d,%s,%d,%f
+      char * parsingTab;
+      int idArticle, quantite;
+      float prix;
+      char intitule[20];
+
+      for(int j = 0 ; j < occurrences ; j++)
+      {
+        parsingTab = strtok(tab[j], ",");
+        //idArticle
+        idArticle = atoi(parsingTab);  
+        printf("%d\n",idArticle);
+        
+        parsingTab = strtok(NULL, ",");
+        //intitule
+        strcpy(intitule, parsingTab);
+        printf("%s\n",intitule);
+
+        parsingTab = strtok(NULL, ",");
+        //quantite
+        quantite = atoi(parsingTab);
+        printf("%d\n",quantite);   
+        
+        parsingTab = strtok(NULL, ",");
+        //prix
+        char tmp[10];
+        strcpy(tmp, parsingTab);
+        int longueur = strlen(parsingTab);
+        for (int i = 0; i < longueur; i++) 
+        {
+            if(tmp[i] == '.') 
+            {
+                tmp[i] = ','; 
+            }
+        }
+        prix = atof(tmp);
+        printf("%f\n",prix);  
+        TotCaddie = TotCaddie + prix;
+        //set le caddie
+
+        w->ajouteArticleTablePanier(intitule, prix, quantite);
+        w->setTotal(TotCaddie);
+      }
+    }
+    else
+    {
+      //ko = erreur
+      parsing = strtok(reponse, "#");
+      printf("Erreur : %s", parsing);
+      perror("Erreur dans le caddie");
+      ::close(sClient);
+      exit(1);
+    }
 }
-
+int compterOccurrences(char *chaine, char caractere) 
+{
+    int compteur = 0;
+    while (*chaine) {
+        if (*chaine == caractere) 
+        {
+            compteur++;
+        }
+        chaine++;
+    }
+    return compteur;
+}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonSupprimer_clicked()
 {
