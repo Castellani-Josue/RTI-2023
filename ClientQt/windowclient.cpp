@@ -1,6 +1,6 @@
 #include "windowclient.h"
 #include "ui_windowclient.h"
-#include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
+#include "../Socket/socket.h"
 #include <unistd.h>
 #include <QMessageBox>
 #include <string>
@@ -14,7 +14,7 @@ int sClient;
 int idArticleEnCours;
 float TotCaddie = 0.0;
 
-#define REPERTOIRE_IMAGES "/home/student/Bureau/RTI-2023-main/ClientQt/images/"
+#define REPERTOIRE_IMAGES "/home/student/Documents/Unix2023/images/"
 
 bool OVESP_Login(char *, char *, int, int);
 int compterOccurrences(char *chaine, char caractere);
@@ -788,17 +788,318 @@ int compterOccurrences(char *chaine, char caractere)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonSupprimer_clicked()
 {
+  char requete[200],reponse[200];
+  int nbEcrits, nbLus;
 
+    int indice = getIndiceArticleSelectionne();
+    if(indice == -1)
+    {
+        dialogueErreur("Erreur","veuillez selectionner un article");
+        return;
+    }
+
+   
+    // ***** Construction de la requete *********************
+    sprintf(requete,"CANCEL#%d",indice);
+    // ***** Envoi requete  *********************************
+
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    // ***** Attente de la reponse **************************
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    if (nbLus == 0)
+    {
+      printf("Serveur arrete, pas de reponse reçue...\n");
+      ::close(sClient);
+      exit(1);
+    }
+
+    // ***** Parsing de la réponse **************************
+    char *ptr = strtok(reponse,"#"); 
+    ptr = strtok(NULL,"#"); 
+
+
+    if (strcmp(ptr,"ok") == 0)
+    {
+      ptr = strtok(NULL,"#"); 
+      printf("Résultat = %s\n",ptr);
+      w->dialogueMessage("CANCEL","Suppression reussie !"); 
+
+      // Mise à jour du caddie
+      w->videTablePanier();
+      w->setTotal(-1.0);
+
+      //** CADDIE
+
+      //mise a jour du caddie
+
+      sprintf(requete, "CADDIE");
+
+      //envoie - réception
+      if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+      {
+        perror("Erreur de Send");
+        ::close(sClient);
+        exit(1);
+      }
+
+      if ((nbLus = Receive(sClient,reponse)) < 0)
+      {
+        perror("Erreur de Receive");
+        ::close(sClient);
+        exit(1);
+      }
+
+      char * parsing = strtok(reponse, "#");
+
+      //ok ou ko
+      parsing = strtok(NULL, "#");
+
+      char * tab[5];
+      if(strcmp(parsing, "ok") == 0)
+      {
+        parsing = strtok(NULL, "#");
+
+        int longueur, i;
+        //début du parsing dans le tableau;
+        for(i = 0; i<5 ;i++)
+        {
+            longueur = strlen(parsing);
+            if(parsing[longueur - 1] == '#') //je met un if car le dernier élément du parsing ne se termine pas par un #, je ne veux donc pas le supprimer
+              parsing[longueur - 1] = '\0'; 
+            strcpy(tab[i], parsing);
+
+            parsing = strtok(NULL, "#");
+            if(parsing == NULL)
+              break;
+        }
+
+        //%d,%s,%d,%f
+        char * parsingTab;
+        int idArticle, quantite;
+        float prix;
+        char intitule[20];
+        for(int j = 0 ; j < i ; j++)
+        {
+          parsingTab = strtok(tab[j], ",");
+          //idArticle
+          idArticle = atoi(parsingTab);
+
+          parsingTab = strtok(NULL, ",");
+          //intitule
+          strcpy(intitule, parsingTab);
+
+          parsingTab = strtok(NULL, ",");
+          //quantite
+          quantite = atoi(parsingTab);
+
+          parsingTab = strtok(NULL, ",");
+          //prix
+          longueur = strlen(parsingTab);
+          for (int i = 0; i < longueur; i++) 
+          {
+              if(parsingTab[i] == '.') 
+              {
+                  parsingTab[i] = ','; 
+              }
+          }
+
+          prix = atof(parsingTab);
+
+          //set le caddie
+          w->ajouteArticleTablePanier(intitule, prix, quantite);
+        }
+
+      }
+
+    }
+    else
+    {
+      ptr = strtok(NULL,"#"); 
+      printf("Erreur: %s\n",ptr);
+      w->dialogueMessage("CANCEL","Suppression echouee !");
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonViderPanier_clicked()
 {
+    // ************* CANCELALL
+    char requete[200],reponse[200];
+    int nbEcrits, nbLus;
 
+   
+    // ***** Construction de la requete *********************
+    sprintf(requete,"CANCELALL");
+    // ***** Envoi requete  *********************************
+
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    // ***** Attente de la reponse **************************
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    /*if (nbLus == 0)
+    {
+      printf("Serveur arrete, pas de reponse reçue...\n");
+      ::close(sClient);
+      exit(1);
+    }*/
+
+      // Mise à jour du caddie
+      w->videTablePanier();
+      w->setTotal(-1.0);
+
+      //** CADDIE
+
+      //mise a jour du caddie
+
+      sprintf(requete, "CADDIE");
+
+      //envoie - réception
+      if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+      {
+        perror("Erreur de Send");
+        ::close(sClient);
+        exit(1);
+      }
+
+      if ((nbLus = Receive(sClient,reponse)) < 0)
+      {
+        perror("Erreur de Receive");
+        ::close(sClient);
+        exit(1);
+      }
+
+      char * parsing = strtok(reponse, "#");
+
+      //ok ou ko
+      parsing = strtok(NULL, "#");
+
+      char * tab[5];
+      if(strcmp(parsing, "ok") == 0)
+      {
+        parsing = strtok(NULL, "#");
+
+        int longueur, i;
+        //début du parsing dans le tableau;
+        for(i = 0; i<5 ;i++)
+        {
+            longueur = strlen(parsing);
+            if(parsing[longueur - 1] == '#') //je met un if car le dernier élément du parsing ne se termine pas par un #, je ne veux donc pas le supprimer
+              parsing[longueur - 1] = '\0'; 
+            strcpy(tab[i], parsing);
+
+            parsing = strtok(NULL, "#");
+            if(parsing == NULL)
+              break;
+        }
+
+        //%d,%s,%d,%f
+        char * parsingTab;
+        int idArticle, quantite;
+        float prix;
+        char intitule[20];
+        for(int j = 0 ; j < i ; j++)
+        {
+          parsingTab = strtok(tab[j], ",");
+          //idArticle
+          idArticle = atoi(parsingTab);
+
+          parsingTab = strtok(NULL, ",");
+          //intitule
+          strcpy(intitule, parsingTab);
+
+          parsingTab = strtok(NULL, ",");
+          //quantite
+          quantite = atoi(parsingTab);
+
+          parsingTab = strtok(NULL, ",");
+          //prix
+          longueur = strlen(parsingTab);
+          for (int i = 0; i < longueur; i++) 
+          {
+              if(parsingTab[i] == '.') 
+              {
+                  parsingTab[i] = ','; 
+              }
+          }
+
+          prix = atof(parsingTab);
+
+          //set le caddie
+          w->ajouteArticleTablePanier(intitule, prix, quantite);
+        }
+
+      }
+    w->dialogueMessage("CANCELALL","Vidage du Caddie reussie !"); 
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonPayer_clicked()
 {
 
+    // ************* CONFIRMER
+    char requete[200],reponse[200];
+    int nbEcrits, nbLus;
+
+   
+    // ***** Construction de la requete *********************
+    sprintf(requete,"CONFIRMER");
+    // ***** Envoi requete  *********************************
+
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    // ***** Attente de la reponse **************************
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    if (nbLus == 0)
+    {
+      printf("Serveur arrete, pas de reponse reçue...\n");
+      ::close(sClient);
+      exit(1);
+    }
+
+    char* ptr = strtok(reponse,"#"); 
+    ptr = strtok(NULL,"#"); 
+
+    if(strcmp(ptr,"ok") == 0)
+    {
+      int numero;
+      ptr = strtok(NULL,"#"); 
+      //NumeroFacture
+      numero = atoi(ptr);
+    }
+
+    
 }
