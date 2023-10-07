@@ -642,6 +642,7 @@ void WindowClient::on_pushButtonAcheter_clicked()
 {
   //********* ACHAT#idArticle#quantite
     char requete[200],reponse[200];
+    //memset(reponse, 0, sizeof(reponse));
     int nbEcrits, nbLus;
 
     sprintf(requete, "ACHAT#%d#%d", idArticleEnCours, w->getQuantite());
@@ -666,13 +667,17 @@ void WindowClient::on_pushButtonAcheter_clicked()
     reponsepars = strtok(reponse, "#");
     reponsepars = strtok(NULL, "#");
 
+    
     if (strcmp(reponsepars, "ko") == 0)
     {
       perror("Erreur de la requête achat ");
       reponsepars = strtok(NULL, "#");
       printf("Erreur : %s\n", reponsepars);
+       w->dialogueErreur("Erreur","L'achat a echoue !");
       return;
     }
+
+    
 
 
     //**************** CADDIE
@@ -705,18 +710,27 @@ void WindowClient::on_pushButtonAcheter_clicked()
     //ok ou ko
     parsing = strtok(NULL, "#");
 
-    char * tab[5];
+    //char * tab[5];
+    char **tab = (char **)malloc(occurrences * sizeof(char *));
+  // Allouer de la mémoire pour chaque élément du tableau
+    for (int i = 0; i < occurrences; i++) 
+    {
+      tab[i] = (char *)malloc(256); 
+      
+    }
+
     if(strcmp(parsing, "ok") == 0)
     {
       printf("%d\n", occurrences);
       for(int i = 0; i<occurrences ;i++)
       {
-        parsing = strtok(NULL, "#");
+          parsing = strtok(NULL, "#");
           strcpy(tab[i], parsing);
 
           printf("%s\n", parsing);
       }
 
+      
 
 
       //%d,%s,%d,%f
@@ -727,41 +741,64 @@ void WindowClient::on_pushButtonAcheter_clicked()
 
       for(int j = 0 ; j < occurrences ; j++)
       {
-        parsingTab = strtok(tab[j], ",");
-        //idArticle
-        idArticle = atoi(parsingTab);  
-        printf("%d\n",idArticle);
-        
+        char *tmpTab = strdup(tab[j]);  // Créez une copie de la chaîne pour éviter de la modifier.
+        parsingTab = strtok(tmpTab, ",");
+
+        if (parsingTab != NULL) 
+        {
+            printf("COUCOU\n");
+            idArticle = atoi(parsingTab);
+            printf("%d\n", idArticle);
+        }
+
+        // Réinitialisez parsingTab avec la copie non modifiée.
         parsingTab = strtok(NULL, ",");
+
         //intitule
         strcpy(intitule, parsingTab);
-        printf("%s\n",intitule);
+        printf("%s\n", intitule);
+        
 
         parsingTab = strtok(NULL, ",");
         //quantite
-        quantite = atoi(parsingTab);
-        printf("%d\n",quantite);   
-        
+        if (parsingTab != NULL) 
+        {
+            quantite = atoi(parsingTab);
+            printf("%d\n", quantite);
+        }
+
         parsingTab = strtok(NULL, ",");
         //prix
-        char tmp[10];
-        strcpy(tmp, parsingTab);
-        int longueur = strlen(parsingTab);
-        for (int i = 0; i < longueur; i++) 
+        if (parsingTab != NULL) 
         {
-            if(tmp[i] == '.') 
+            char tmp[10];
+            strcpy(tmp, parsingTab);
+            int longueur = strlen(parsingTab);
+            for (int i = 0; i < longueur; i++) 
             {
-                tmp[i] = ','; 
+                if (tmp[i] == '.') 
+                {
+                    tmp[i] = ',';
+                }
             }
+            prix = atof(tmp);
+            printf("%f\n", prix);
         }
-        prix = atof(tmp);
-        printf("%f\n",prix);  
+
+        free(tmpTab);
         TotCaddie = TotCaddie + prix;
         //set le caddie
 
         w->ajouteArticleTablePanier(intitule, prix, quantite);
         w->setTotal(TotCaddie);
+        
       }
+      for (int i = 0; i < occurrences; i++) 
+      {
+        free(tab[i]);
+      }
+
+      free(tab);
     }
     else
     {
@@ -769,6 +806,7 @@ void WindowClient::on_pushButtonAcheter_clicked()
       parsing = strtok(reponse, "#");
       printf("Erreur : %s", parsing);
       perror("Erreur dans le caddie");
+      w->dialogueErreur("Erreur","L'achat a echoue !");
       ::close(sClient);
       exit(1);
     }
@@ -840,7 +878,7 @@ void WindowClient::on_pushButtonSupprimer_clicked()
       w->videTablePanier();
       w->setTotal(-1.0);
 
-      //** CADDIE
+       //**************** CADDIE
 
       //mise a jour du caddie
 
@@ -861,66 +899,116 @@ void WindowClient::on_pushButtonSupprimer_clicked()
         exit(1);
       }
 
+      int occurrences = compterOccurrences(reponse, '#');
+      occurrences--; //ici on fait -- parce que il y a 1 # en trop dans la réponse pour savoir le nombre d'élément dans caddie
+
       char * parsing = strtok(reponse, "#");
+      char * tmp;
 
       //ok ou ko
       parsing = strtok(NULL, "#");
 
-      char * tab[5];
+      //char * tab[5];
+      char **tab = (char **)malloc(occurrences * sizeof(char *));
+      // Allouer de la mémoire pour chaque élément du tableau
+      for (int i = 0; i < occurrences; i++) 
+      {
+        tab[i] = (char *)malloc(256); 
+        
+      }
+
       if(strcmp(parsing, "ok") == 0)
       {
-        parsing = strtok(NULL, "#");
-
-        int longueur, i;
-        //début du parsing dans le tableau;
-        for(i = 0; i<5 ;i++)
+        printf("%d\n", occurrences);
+        for(int i = 0; i<occurrences ;i++)
         {
-            longueur = strlen(parsing);
-            if(parsing[longueur - 1] == '#') //je met un if car le dernier élément du parsing ne se termine pas par un #, je ne veux donc pas le supprimer
-              parsing[longueur - 1] = '\0'; 
+            parsing = strtok(NULL, "#");
             strcpy(tab[i], parsing);
 
-            parsing = strtok(NULL, "#");
-            if(parsing == NULL)
-              break;
+            printf("%s\n", parsing);
         }
+
+      
+
 
         //%d,%s,%d,%f
         char * parsingTab;
         int idArticle, quantite;
         float prix;
         char intitule[20];
-        for(int j = 0 ; j < i ; j++)
-        {
-          parsingTab = strtok(tab[j], ",");
-          //idArticle
-          idArticle = atoi(parsingTab);
 
+        for(int j = 0 ; j < occurrences ; j++)
+        {
+          char *tmpTab = strdup(tab[j]);  // Créez une copie de la chaîne pour éviter de la modifier.
+          parsingTab = strtok(tmpTab, ",");
+
+          if (parsingTab != NULL) 
+          {
+              printf("COUCOU\n");
+              idArticle = atoi(parsingTab);
+              printf("%d\n", idArticle);
+          }
+
+          // Réinitialisez parsingTab avec la copie non modifiée.
           parsingTab = strtok(NULL, ",");
+
           //intitule
-          strcpy(intitule, parsingTab);
+          if (parsingTab != NULL) 
+          {
+              strcpy(intitule, parsingTab);
+              printf("%s\n", intitule);
+          }
 
           parsingTab = strtok(NULL, ",");
           //quantite
-          quantite = atoi(parsingTab);
+          if (parsingTab != NULL) 
+          {
+              quantite = atoi(parsingTab);
+              printf("%d\n", quantite);
+          }
 
           parsingTab = strtok(NULL, ",");
           //prix
-          longueur = strlen(parsingTab);
-          for (int i = 0; i < longueur; i++) 
+          if (parsingTab != NULL) 
           {
-              if(parsingTab[i] == '.') 
+              char tmp[10];
+              strcpy(tmp, parsingTab);
+              int longueur = strlen(parsingTab);
+              for (int i = 0; i < longueur; i++) 
               {
-                  parsingTab[i] = ','; 
+                  if (tmp[i] == '.') 
+                  {
+                      tmp[i] = ',';
+                  }
               }
+              prix = atof(tmp);
+              printf("%f\n", prix);
           }
 
-          prix = atof(parsingTab);
-
+          free(tmpTab);
+          TotCaddie = TotCaddie + prix;
           //set le caddie
+
           w->ajouteArticleTablePanier(intitule, prix, quantite);
+          w->setTotal(TotCaddie);
+        
+        }
+        for (int i = 0; i < occurrences; i++) 
+        {
+          free(tab[i]);
         }
 
+        free(tab);
+      }
+      else
+      {
+        //ko = erreur
+        parsing = strtok(reponse, "#");
+        printf("Erreur : %s", parsing);
+        perror("Erreur dans le caddie");
+        w->dialogueErreur("Erreur","L'achat a echoue !");
+        ::close(sClient);
+        exit(1);
       }
 
     }
@@ -968,6 +1056,7 @@ void WindowClient::on_pushButtonViderPanier_clicked()
 
       // Mise à jour du caddie
       w->videTablePanier();
+      TotCaddie = 0.0;
       w->setTotal(-1.0);
 
       //** CADDIE
@@ -1099,7 +1188,17 @@ void WindowClient::on_pushButtonPayer_clicked()
       ptr = strtok(NULL,"#"); 
       //NumeroFacture
       numero = atoi(ptr);
+
+
+      w->videTablePanier();
+      TotCaddie = 0.0;
+      w->setTotal(-1.0);
+
+      
+      
     }
+
+
 
     
 }
