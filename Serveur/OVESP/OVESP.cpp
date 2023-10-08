@@ -25,7 +25,7 @@ void TestArticle(int idArticle, char * reponse, bool consult);
 int AchatArticle(int idArticle, int quantite, char * reponse);
 bool ConcatenationCaddie(char * reponse);
 bool CancelArticle(int idArticle);
-bool CancelAll(int * tab, int taille);
+bool CancelAll(int * tab, int *taille);
 int testTableVide();
 void HeureActuelle(char *Heure);
 bool Montant(float * montant);
@@ -193,8 +193,9 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
         //récupération des id des article
         int tab[5];
+        int taille;
 
-        if(!CancelAll(tab, 5))
+        if(!CancelAll(tab, &taille))
         {
             fprintf(stderr, "Erreur dans la recuperation de idArticle !\n");
         }
@@ -202,9 +203,9 @@ bool OVESP(char* requete , char* reponse ,int socket)
         // on retire les éléments de caddie et on met a jour la table article
 
 
-        for(int i=0; i<5; i++)
+        for(int i=0; i<taille; i++)
         {
-            if(!CancelArticle(tab[i]))
+            if(!CancelArticle(0))
             {
                 fprintf(stderr,"Erreur de cancelall !\n");
             }
@@ -250,17 +251,18 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
             //récupération des id des article
             int tab1[5];
+            int taille;
 
-            if(!CancelAll(tab1, 5))
+            if(!CancelAll(tab1, &taille))
             {
                 fprintf(stderr, "Erreur dans la recuperation de idArticle 1 !\n");
             }
 
             // on retire les éléments de caddie et on met a jour la table article
 
-            for(int i=0; i<5; i++)
+            for(int i=0; i<taille; i++)
             {
-                if(!CancelArticle(tab1[i]))
+                if(!CancelArticle(0))
                 {
                     fprintf(stderr,"Erreur de cancelall 1 !\n");
                 }
@@ -580,14 +582,14 @@ bool ConcatenationCaddie(char * reponse)
 
     int i = 0;
 
-    sprintf(reponse, "CADDIE#ok#");
+    sprintf(reponse, "CADDIE#ok#0");//0 ne change pas atoi
     while ((Tuple = mysql_fetch_row(resultat)) != NULL && i < 5)
     {
         // Allouez de la mémoire pour chaque chaîne de caractères
         char *occurrence = (char *)malloc(256); // Vous pouvez ajuster la taille selon vos besoins
 
         // Utilisez snprintf pour copier les données dans la mémoire allouée
-        sprintf(occurrence, "%d,%s,%d,%f#", atoi(Tuple[0]), Tuple[1], atoi(Tuple[2]), atof(Tuple[3]));
+        sprintf(occurrence, "%d,%s,%d,%f$", atoi(Tuple[0]), Tuple[1], atoi(Tuple[2]), atof(Tuple[3]));
 
 
         // Stockez le pointeur vers la mémoire allouée dans le tableau
@@ -596,14 +598,14 @@ bool ConcatenationCaddie(char * reponse)
         i++;
     }
 
-    int longueur = strlen (reponse);
-    reponse[longueur-1] = '\0';
+    /*int longueur = strlen (reponse);
+    reponse[longueur-1] = '\0';*/
 
     mysql_close(connexion);
     return true;
 }
 
-bool CancelArticle(int idArticle)
+bool CancelArticle(int indiceArticle)
 {
     int qtt = 0, qttstock;
 
@@ -616,23 +618,33 @@ bool CancelArticle(int idArticle)
         return false;
     } 
     int i = 0;
-    while ((Tuple = mysql_fetch_row(resultat)) != NULL && i < 5)
+    Tuple = mysql_fetch_row(resultat);
+    while (i != indiceArticle)
     {
-        if(atoi(Tuple[0]) == idArticle)
-        {
-            //sauvegarde de la qtt a rajouté dans la tables article
-            qtt = atoi(Tuple[2]);
-            break;
-        }
+        Tuple = mysql_fetch_row(resultat);
+        i++;
     }
+
+    //trouver
+
+    int idASupprimer = atoi(Tuple[0]);
+    int quantite = atoi(Tuple[2]);
 
     //je supprime le tuple
     char requete_delete[256];
-    sprintf(requete_delete, "DELETE FROM caddies WHERE id = %d", idArticle);
+    printf("ID : %d", idASupprimer);
+    sprintf(requete_delete, "DELETE FROM caddies WHERE idArticle = %d", idASupprimer);
 
-    //ajoute la qtt au tuple de la table article correspondant
 
-    strcpy(requete,"select * from articles");
+    if(mysql_query(connexion,requete_delete) != 0)
+    {
+        fprintf(stderr, "Erreur de mysql_query: %s\n",mysql_error(connexion));
+        mysql_close(connexion);
+        return false;
+    }
+
+    sprintf(requete, "SELECT * FROM articles where id = %d", idASupprimer);
+
 
     if(mysql_query(connexion,requete) != 0)
     {
@@ -648,28 +660,32 @@ bool CancelArticle(int idArticle)
         return false;
     }
 
-    while ((Tuple = mysql_fetch_row(resultat)) != NULL)
-    {
-        if(atoi(Tuple[0]) == idArticle)
-        {
-            qttstock = atoi(Tuple[3]);
-            break;
-        }
-    }
+    Tuple = mysql_fetch_row(resultat);
+
+    qttstock = atoi(Tuple[3]);
 
     //qtt à mettre dans la table article
-    qtt = qtt + qttstock;
 
+    printf("OOOOOOOO %d, %d", qttstock, quantite);
+    qttstock = qttstock + quantite;
+    
     //maj
     char requete_update[256];
-    sprintf(requete_update, "UPDATE articles SET stock = %d WHERE id = %d", qtt, idArticle);
+    sprintf(requete_update, "UPDATE articles SET stock = %d WHERE id = %d", qttstock, idASupprimer);
+
+    if(mysql_query(connexion,requete_update) != 0)
+    {
+        fprintf(stderr, "Erreur de mysql_query: %s\n",mysql_error(connexion));
+        mysql_close(connexion);
+        return false;
+    }
 
 
     mysql_close(connexion);
     return true;
 }
 
-bool CancelAll(int * tab, int taille)
+bool CancelAll(int * tab, int* taille)
 {
     char nomTable[20];
     strcpy(nomTable, "caddies");
@@ -681,11 +697,13 @@ bool CancelAll(int * tab, int taille)
     } 
 
     int i = 0;
-    while ((Tuple = mysql_fetch_row(resultat)) != NULL && i < taille)
+    while ((Tuple = mysql_fetch_row(resultat)) != NULL)
     {
         tab[i] = atoi(Tuple[0]);
         i++;
     }
+
+    *taille = i;
 
     mysql_close(connexion);
     return true;
