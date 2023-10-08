@@ -4,9 +4,8 @@
 #include <string.h>
 #include <signal.h>
 #include <pthread.h>
-#include "OVESP.h"
-#include "/home/student/Bureau/RTI-2023-main/Socket/socket.h"
-
+#include "../Socket/socket.h"
+#include "./OVESP/OVESP.h"
 
 
 void HandlerSIGINT(int s);
@@ -17,10 +16,11 @@ int sEcoute;
 
 // Gestion du pool de threads
 
-#define NB_THREADS_POOL 7 //client connecté en même temps
-#define TAILLE_FILE_ATTENTE 20 //client en attente de connection
+#define NB_THREADS_POOL 7
+#define TAILLE_FILE_ATTENTE 20
+//#define PORT_ACHAT 50000
 
-int socketsAcceptees[TAILLE_FILE_ATTENTE]; //correspond au vecteur qui symbolise la file d'attente
+int socketsAcceptees[TAILLE_FILE_ATTENTE];
 int indiceEcriture=0, indiceLecture=0;
 pthread_mutex_t mutexSocketsAcceptees;
 pthread_cond_t condSocketsAcceptees;
@@ -28,7 +28,7 @@ pthread_cond_t condSocketsAcceptees;
 int main(int argc,char* argv[])
 {
 
- if (argc != 2) //port passé en paramètre incorrect
+ if (argc != 2)
  {
 	 printf("Erreur...\n");
 	 printf("USAGE : Serveur portServeur\n");
@@ -40,7 +40,7 @@ int main(int argc,char* argv[])
  pthread_cond_init(&condSocketsAcceptees,NULL);
 
  for (int i=0 ; i<TAILLE_FILE_ATTENTE ; i++)
- socketsAcceptees[i] = -1; 
+ socketsAcceptees[i] = -1;
 
  // Armement des signaux
  struct sigaction A;
@@ -71,12 +71,11 @@ int main(int argc,char* argv[])
  // Mise en boucle du serveur
  int sService;
  char ipClient[50];
- int i = 0;
  printf("Demarrage du serveur.\n");
  while(1)
  {
 	 printf("Attente d'une connexion...\n");
-	 if ((sService = Accept(sEcoute,ipClient)) == -1) //Accept est bloquant
+	 if ((sService = Accept(sEcoute,ipClient)) == -1)
 	 {
 		 perror("Erreur de Accept");
 		 close(sEcoute);
@@ -111,7 +110,6 @@ void* FctThreadClient(void* p)
 	 while (indiceEcriture == indiceLecture)
 	 	pthread_cond_wait(&condSocketsAcceptees,&mutexSocketsAcceptees);
 
-	//dif = il récupère la première socket de service a l'indice indiceLecture
 	 sService = socketsAcceptees[indiceLecture];
 	 socketsAcceptees[indiceLecture] = -1;
 	 indiceLecture++;
@@ -129,16 +127,16 @@ void* FctThreadClient(void* p)
 
 void HandlerSIGINT(int s)
 {
- printf("\nArret du serveur.\n");
- close(sEcoute);
+	printf("\nArret du serveur.\n");
+	close(sEcoute);
 
- pthread_mutex_lock(&mutexSocketsAcceptees);
- for (int i=0 ; i<TAILLE_FILE_ATTENTE ; i++)
- if (socketsAcceptees[i] != -1) close(socketsAcceptees[i]);
- pthread_mutex_unlock(&mutexSocketsAcceptees);
+	pthread_mutex_lock(&mutexSocketsAcceptees);
+	for (int i=0 ; i<TAILLE_FILE_ATTENTE ; i++)
+	if (socketsAcceptees[i] != -1) close(socketsAcceptees[i]);
+	pthread_mutex_unlock(&mutexSocketsAcceptees);
 
- //close de la socket qu'il utilise
- //OVESP_Close();
+	//close de la socket qu'il utilise
+ 	//SMOP_Close();
  exit(0);
 }
 
