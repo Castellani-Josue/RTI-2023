@@ -272,8 +272,30 @@ void WindowClient::dialogueErreur(const char* titre,const char* message)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::closeEvent(QCloseEvent *event)
 {
+   char requete[200],reponse[200];
+    int nbEcrits, nbLus;
 
-  exit(0);
+   
+    // ***** Construction de la requete *********************
+    sprintf(requete,"LOGOUT");
+    // ***** Envoi requete  *********************************
+
+    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+    {
+      perror("Erreur de Send");
+      ::close(sClient);
+      exit(1);
+    }
+
+    // ***** Attente de la reponse **************************
+    if ((nbLus = Receive(sClient,reponse)) < 0)
+    {
+      perror("Erreur de Receive");
+      ::close(sClient);
+      exit(1);
+    }
+
+    exit(0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
