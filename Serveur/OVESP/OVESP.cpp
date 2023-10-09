@@ -17,6 +17,9 @@ pthread_mutex_t mutexClients = PTHREAD_MUTEX_INITIALIZER;
 int nbClients = 0;
 int clients[NB_MAX_CLIENTS];
 
+int clientID = -1; 
+
+
 bool ConnextionBd(char nomTable[20]);
 int EstPresent(char * login);
 bool CreationDuClient(int socket, char user[50], char password[50]);
@@ -29,7 +32,7 @@ bool CancelAll(int * tab, int *taille);
 int testTableVide();
 void HeureActuelle(char *Heure);
 bool Montant(float * montant);
-bool CreationFacture(int socket, char date[11], float montant);
+bool CreationFacture(int client_ID, char date[11], float montant);
 void ajoute(int socket);
 void retire(int socket);
 int idClient(char login[50], char password[50]);
@@ -70,6 +73,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
                     {
                         sprintf(reponse,"LOGIN#ok#%d", varidClient);
                         ajoute(socket);
+                        clientID = varidClient;
                     }
                     else
                     {
@@ -233,7 +237,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         }
 
         //création de la facture
-        if(!CreationFacture(socket, date, montant))
+        if(!CreationFacture(clientID, date, montant))
         {
             fprintf(stderr,"Erreur dans la creation de facture !\n");
         }
@@ -769,6 +773,7 @@ void HeureActuelle(char *Heure)
 bool Montant(float * montant)
 {
     float tmp = 0;
+    printf("MONTANT TEST\n\n");
 
     char nomTable[20];
     strcpy(nomTable, "caddies");
@@ -785,13 +790,14 @@ bool Montant(float * montant)
         tmp = atof(Tuple[2]) * atof(Tuple[3]);
         *montant = *montant + tmp;
         i++;
+        printf("MONTANT = %f\n\n",*montant);
     }
 
     mysql_close(connexion);
     return true;
 }
 
-bool CreationFacture(int socket, char date[11], float montant)
+bool CreationFacture(int client_ID, char date[11], float montant)
 {
     connexion = mysql_init(NULL);
     if (mysql_real_connect(connexion,"localhost","Student","PassStudent1_","PourStudent",0,0,0) == NULL)
@@ -802,7 +808,8 @@ bool CreationFacture(int socket, char date[11], float montant)
     }
 
 
-    sprintf(requete,"insert into factures values (NULL, %d,'%s', %f, %d);",socket, date, montant, 0);
+    sprintf(requete,"insert into factures values (NULL, %d,'%s', %f, %d);",client_ID, date, montant, 0);
+    //sprintf(requete, "INSERT INTO factures (id,idClient, date, montant, paye) VALUES (NULL,%d, '%s', %f, %d);", client_ID, date, montant, 0);
     if(!mysql_query(connexion,requete))
     {
         fprintf(stderr,"(OVESP) Erreur de mysql_query...\n");
