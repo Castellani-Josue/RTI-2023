@@ -13,8 +13,10 @@ extern WindowClient *w;
 int sClient;
 int idArticleEnCours;
 float TotCaddie = 0.0;
+bool logged = false;
+int nbArticlePanier = 0;
 
-#define REPERTOIRE_IMAGES "/home/student/Documents/RtI/LaboRTI2023_sources-main/ClientQt/images/"
+#define REPERTOIRE_IMAGES "/home/student/Bureau/RTI-2023-main/ClientQt/images/"
 
 bool OVESP_Login(char *, char *, int, int);
 int compterOccurrences(char *chaine, char caractere);
@@ -273,29 +275,34 @@ void WindowClient::dialogueErreur(const char* titre,const char* message)
 void WindowClient::closeEvent(QCloseEvent *event)
 {
    char requete[200],reponse[200];
-    int nbEcrits, nbLus;
+   int nbEcrits, nbLus;
 
-   
-    // ***** Construction de la requete *********************
-    sprintf(requete,"LOGOUT");
-    // ***** Envoi requete  *********************************
+   if(logged)
+   {
+      // ***** Construction de la requete *********************
+      sprintf(requete,"LOGOUT");
+      // ***** Envoi requete  *********************************
 
-    if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
-    {
-      perror("Erreur de Send");
-      ::close(sClient);
-      exit(1);
-    }
+      if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
+      {
+        perror("Erreur de Send");
+        ::close(sClient);
+        exit(1);
+      }
 
-    // ***** Attente de la reponse **************************
-    if ((nbLus = Receive(sClient,reponse)) < 0)
-    {
-      perror("Erreur de Receive");
-      ::close(sClient);
-      exit(1);
-    }
+      // ***** Attente de la reponse **************************
+      if ((nbLus = Receive(sClient,reponse)) < 0)
+      {
+        perror("Erreur de Receive");
+        ::close(sClient);
+        exit(1);
+      }
+   }
 
-    exit(0);
+   nbArticlePanier = 0;
+
+   ::close(sClient);
+   exit(0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -330,6 +337,8 @@ void WindowClient::on_pushButtonLogin_clicked()
           exit(1);
         }
     }
+
+    logged = true;
 }
 
 bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
@@ -493,6 +502,8 @@ void WindowClient::on_pushButtonLogout_clicked()
     
     w->dialogueMessage("LOGOUT","Logout reussi !");
     w->logoutOK();
+    nbArticlePanier = 0;
+    logged = false;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -664,7 +675,9 @@ void WindowClient::on_pushButtonPrecedent_clicked()
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonAcheter_clicked()
 {
-  //********* ACHAT#idArticle#quantite
+  if(nbArticlePanier < 5)
+  {
+    //********* ACHAT#idArticle#quantite
     char requete[200],reponse[200];
     //memset(reponse, 0, sizeof(reponse));
     int nbEcrits, nbLus;
@@ -833,6 +846,7 @@ void WindowClient::on_pushButtonAcheter_clicked()
         //free(tmpTab);
         TotCaddie = TotCaddie + prix;
         w->setTotal(TotCaddie);
+        nbArticlePanier++;
         w->ajouteArticleTablePanier(intitule, prix, quantite);
        
               
@@ -843,10 +857,6 @@ void WindowClient::on_pushButtonAcheter_clicked()
       }
 
       free(tab);
-       
-      //set le caddie
-      
-      
       
     }
     else
@@ -859,7 +869,11 @@ void WindowClient::on_pushButtonAcheter_clicked()
       ::close(sClient);
       exit(1);
     }
-
+  }
+  else
+  {
+    w->dialogueErreur("Achat", "Nombre maximum d'achat atteint !");
+  }
 }
 int compterOccurrences(char *chaine, char caractere) 
 {
@@ -1036,6 +1050,7 @@ void WindowClient::on_pushButtonSupprimer_clicked()
 
             w->ajouteArticleTablePanier(intitule, prix, quantite);
             w->setTotal(TotCaddie);
+            nbArticlePanier--;
             
           }
           for (int i = 0; i < occurrences; i++) 
@@ -1102,6 +1117,7 @@ void WindowClient::on_pushButtonViderPanier_clicked()
       w->videTablePanier();
       TotCaddie = 0.0;
       w->setTotal(-1.0);
+      nbArticlePanier = 0;
 
      
     w->dialogueMessage("CANCELALL","Vidage du Caddie reussie !"); 
@@ -1157,15 +1173,10 @@ void WindowClient::on_pushButtonPayer_clicked()
         w->videTablePanier();
         TotCaddie = 0.0;
         w->setTotal(-1.0);
+        nbArticlePanier = 0;
 
       
       w->dialogueMessage("CONFIMER","ACHAT CONFIRME !"); 
 
-      
-      
-    }
-
-
-
-    
+  } 
 }

@@ -179,15 +179,15 @@ int Send(int sSocket,char data[],int taille)
 	if (taille > TAILLE_MAX_DATA)
 		return -1;
 
-	printf("\n TRAME B4 : %s", data);
+	//printf("\n TRAME B4 : %s", data);
 
-	printf("\n TAILLE : %d", taille);
+	//printf("\n TAILLE : %d", taille);
 
 	// Preparation de la charge utile
 	char trame[TAILLE_MAX_DATA+2];
 	strcpy(trame, data);
-	printf("\n TAILLE : %d", taille);
-	printf("\n TRAME DATA : %s\n\n\n\n", trame);
+	//printf("\n TAILLE : %d", taille);
+	//printf("\n TRAME DATA : %s\n\n\n\n", trame);
 	strcat(trame, "#");
 	strcat(trame, ")");
 

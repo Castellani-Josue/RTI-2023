@@ -136,8 +136,8 @@ void HandlerSIGINT(int s)
 	pthread_mutex_unlock(&mutexSocketsAcceptees);
 
 	//close de la socket qu'il utilise
- 	//SMOP_Close();
- exit(0);
+ 	OVESP_Close();
+ 	exit(0);
 }
 
 
