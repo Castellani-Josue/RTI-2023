@@ -42,6 +42,15 @@ int ServerSocket(int port)
 	}
 	printf("Création de socket réussie : %d", s); 
 
+	//cheat//
+
+    int option = 1;
+
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(int)) < 0)
+        perror("setsockopt(SO_REUSEADDR) failed");
+
+    /////////
+
 	//construction de l'addresse réseau de la socket
  	struct addrinfo hints;
 	struct addrinfo *results;
@@ -131,6 +140,15 @@ int ClientSocket(char* ipServeur,int portServeur)
 		exit(1);
 	}
 	printf("Création de socket réussie : %d", s); 
+
+	    //cheat///
+
+    int option = 1;
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(int)) < 0)
+        perror("setsockopt(SO_REUSEADDR) failed");
+
+
+    /////////////
 	// Construction de l'adresse du serveur
 	struct addrinfo myAddrInfo; // Déclare une variable de type struct addrinfo
 	struct addrinfo *results;
@@ -156,18 +174,28 @@ int ClientSocket(char* ipServeur,int portServeur)
 
 }
 
-int Send(int sSocket,char* data,int taille)
+int Send(int sSocket,char data[],int taille)
 {
 	if (taille > TAILLE_MAX_DATA)
 		return -1;
 
+	printf("\n TRAME B4 : %s", data);
+
+	printf("\n TAILLE : %d", taille);
+
 	// Preparation de la charge utile
 	char trame[TAILLE_MAX_DATA+2];
-	memcpy(trame,data,taille);
-	trame[taille] = '#';
-	trame[taille+1] = ')';
+	strcpy(trame, data);
+	printf("\n TAILLE : %d", taille);
+	printf("\n TRAME DATA : %s\n\n\n\n", trame);
+	strcat(trame, "#");
+	strcat(trame, ")");
+
+
 
 	// Ecriture sur la socket
+
+	printf("\n TRAME : %s", trame);
 	return write(sSocket,trame,taille+2)-2;
 }
 
@@ -186,7 +214,8 @@ int Receive(int sSocket,char* data)
 		{
 			if ((nbLus = read(sSocket,&lu2,1)) == -1)
 			return -1;
-			if (nbLus == 0) return i; // connexion fermee par client
+			if (nbLus == 0) 
+				return i; // connexion fermee par client
 
 			if (lu2 == ')') fini = true;
 			else
@@ -202,7 +231,7 @@ int Receive(int sSocket,char* data)
 			i++;
 		}
 	}
-	
+	data[i] = '\0';
 	return i;
 }
 
