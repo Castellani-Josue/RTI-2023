@@ -345,6 +345,7 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
 {
   //LOGIN#log#MDP#nvclient
 
+  int off = 0;
   bool onContinue = true;
   char requete[200],reponse[200];
 
@@ -466,8 +467,21 @@ bool OVESP_Login(char * user, char * password, int NouveauClient, int sClient)
   {
     ptr = strtok(NULL,"#"); 
     printf("Erreur: %s\n",ptr);
-    onContinue = false;
-     w->dialogueMessage("Login","Erreur de Login  !");
+    if(strcmp(ptr, "Mot de passe incorrecte !") == 0)
+    {
+      off++;
+      w->dialogueMessage("Login","Mot de passe incorrecte !");
+      if(off == 3)
+      {
+        onContinue = false;
+      }
+
+    }
+    else
+    {
+        w->dialogueMessage("Login","Erreur fatal de Login  !");
+        onContinue = false;
+    }
   }
 
   return onContinue;
@@ -674,13 +688,44 @@ void WindowClient::on_pushButtonPrecedent_clicked()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void WindowClient::on_pushButtonAcheter_clicked()
-{
-  if(nbArticlePanier < 5)
+{ 
+  //********* ACHAT#idArticle#quantite
+  char requete[200],reponse[200];
+  int nbEcrits, nbLus;
+
+  bool etaitpresent = false;
+  sprintf(requete, "PRESENCECADDIE#%d", idArticleEnCours);
+
+  printf("\nSEND\n");
+  //envoie - réception
+  if ((nbEcrits = Send(sClient,requete,strlen(requete))) == -1)
   {
-    //********* ACHAT#idArticle#quantite
-    char requete[200],reponse[200];
-    //memset(reponse, 0, sizeof(reponse));
-    int nbEcrits, nbLus;
+    perror("Erreur de Send");
+    ::close(sClient);
+    exit(1);
+  }
+
+  printf("\nRECEIVE\n");
+
+
+  if ((nbLus = Receive(sClient,reponse)) < 0)
+  {
+    perror("Erreur de Receive");
+    ::close(sClient);
+    exit(1);
+  }
+
+  char * reponsepars;
+  reponsepars = strtok(reponse, "#");
+  reponsepars = strtok(NULL, "#");
+
+  if (strcmp(reponsepars, "ok") == 0)
+  {
+    etaitpresent = true;
+  }
+
+  if(nbArticlePanier < 5 || etaitpresent)
+  {
 
     sprintf(requete, "ACHAT#%d#%d", idArticleEnCours, w->getQuantite());
 
@@ -704,7 +749,6 @@ void WindowClient::on_pushButtonAcheter_clicked()
       exit(1);
     }
 
-    char * reponsepars;
     reponsepars = strtok(reponse, "#");
     reponsepars = strtok(NULL, "#");
 
@@ -717,7 +761,6 @@ void WindowClient::on_pushButtonAcheter_clicked()
        w->dialogueErreur("Erreur","L'achat a echoue !");
       return;
     }
-
 
     strcpy(requete, "");
     strcpy(reponse, "");
@@ -757,7 +800,6 @@ void WindowClient::on_pushButtonAcheter_clicked()
 
 
     int occurrences = compterOccurrences(reponse, '$');
-    //occurrences --; //ici on fait -- parce que il y a 1 # en trop dans la réponse pour savoir le nombre d'élément dans caddie
 
     char * parsing = strtok(reponse, "#");
     char * tmp;
@@ -774,6 +816,8 @@ void WindowClient::on_pushButtonAcheter_clicked()
       
     }
 
+
+
     if(strcmp(parsing, "ok") == 0)
     {
       printf("%d\n", occurrences);
@@ -784,12 +828,6 @@ void WindowClient::on_pushButtonAcheter_clicked()
 
           printf("%s\n", parsing);
       }
-
-
-      
-
-      
-
 
       //%d,%s,%d,%f
       char * parsingTab;
@@ -846,11 +884,15 @@ void WindowClient::on_pushButtonAcheter_clicked()
         //free(tmpTab);
         TotCaddie = TotCaddie + prix;
         w->setTotal(TotCaddie);
-        nbArticlePanier++;
         w->ajouteArticleTablePanier(intitule, prix, quantite);
        
               
       }
+      if(!etaitpresent)
+      {
+              nbArticlePanier++;
+      }
+
       for (int i = 0; i < occurrences; i++) 
       {
         free(tab[i]);
@@ -937,6 +979,7 @@ void WindowClient::on_pushButtonSupprimer_clicked()
       ptr = strtok(NULL,"#"); 
       printf("Résultat = %s\n",ptr);
       w->dialogueMessage("CANCEL","Suppression reussie !"); 
+      nbArticlePanier--;
 
       // Mise à jour du caddie
       w->videTablePanier();
@@ -1050,8 +1093,6 @@ void WindowClient::on_pushButtonSupprimer_clicked()
 
             w->ajouteArticleTablePanier(intitule, prix, quantite);
             w->setTotal(TotCaddie);
-            nbArticlePanier--;
-            
           }
           for (int i = 0; i < occurrences; i++) 
           {

@@ -48,6 +48,10 @@ clean:
 clean_executables :
 	echo suppression exec
 	rm -f $(EXECUTABLES) *o
+clobber :
+	echo restart
+	rm -f $(OBJS)
+	rm -f $(EXECUTABLES) *o
 
 clean_all: clean clean_executables
 	rm -rf build
