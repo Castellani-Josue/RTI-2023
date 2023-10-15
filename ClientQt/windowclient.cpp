@@ -724,7 +724,7 @@ void WindowClient::on_pushButtonAcheter_clicked()
     etaitpresent = true;
   }
 
-  if(nbArticlePanier < 5 || etaitpresent)
+  if((nbArticlePanier < 5 || etaitpresent) && w->getQuantite() != 0)
   {
 
     sprintf(requete, "ACHAT#%d#%d", idArticleEnCours, w->getQuantite());
@@ -835,7 +835,7 @@ void WindowClient::on_pushButtonAcheter_clicked()
       float prix;
       char intitule[20];
       w->videTablePanier();
-      TotCaddie =0;
+      TotCaddie = 0;
       for(int j = 0 ; j < occurrences ; j++)
       {
         //char *tmpTab = strdup(tab[j]);  // Créez une copie de la chaîne pour éviter de la modifier.
@@ -914,7 +914,14 @@ void WindowClient::on_pushButtonAcheter_clicked()
   }
   else
   {
-    w->dialogueErreur("Achat", "Nombre maximum d'achat atteint !");
+    if(nbArticlePanier == 5)
+    { 
+      w->dialogueErreur("Achat", "Nombre maximum d'achat atteint !");
+    }
+    if(w->getQuantite() == 0)
+    {
+      w->dialogueErreur("Achat", "Veuillez choisir une quantité valide !");
+    }
   }
 }
 int compterOccurrences(char *chaine, char caractere) 
@@ -1043,7 +1050,7 @@ void WindowClient::on_pushButtonSupprimer_clicked()
           int idArticle, quantite;
           float prix;
           char intitule[20];
-
+          TotCaddie = 0.0;
           for(int j = 0 ; j < occurrences ; j++)
           {
             char *tmpTab = strdup(tab[j]);  // Créez une copie de la chaîne pour éviter de la modifier.

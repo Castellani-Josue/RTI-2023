@@ -6,11 +6,12 @@
 #include <mysql.h>
 #include "OVESP.h"
 
+pthread_mutex_t mutexConnection = PTHREAD_MUTEX_INITIALIZER;
 
-thread_local MYSQL* connexion;
-thread_local char requete[200];
-thread_local MYSQL_RES  *resultat;
-thread_local MYSQL_ROW  Tuple;
+MYSQL* connexion;
+char requete[200];
+MYSQL_RES  *resultat;
+MYSQL_ROW  Tuple;
 
 pthread_mutex_t mutexClients = PTHREAD_MUTEX_INITIALIZER;
 
@@ -19,8 +20,6 @@ pthread_mutex_t mutexClients = PTHREAD_MUTEX_INITIALIZER;
 int nbClients = 0;
 int clients[NB_MAX_CLIENTS];
 
-pthread_key_t cleClientID;
-int varidClient = -1;
 
 typedef struct {
     int qtt;
@@ -34,38 +33,32 @@ int EstPresent(char * login);
 bool CreationDuClient(int socket, char user[50], char password[50]);
 bool MotDePasseCorrecte(char login[50], char password[50]);
 void TestArticle(int idArticle, char * reponse, bool consult);
-int AchatArticle(int idArticle, int quantite, char * reponse);
-bool ConcatenationCaddie(char * reponse);
-bool CancelArticle(int idArticle);
-int testTableVide();
+int AchatArticle(int idArticle, int quantite, char * reponse, int varidClient);
+bool ConcatenationCaddie(char * reponse, int varidClient);
+bool CancelArticle(int idArticle, int varidClient);
+int testCaddieVide(int varidClient);
 void HeureActuelle(char *Heure);
-bool Montant(float * montant);
-bool CreationFacture(char date[11], float montant);
+bool Montant(float * montant, int varidClient);
+bool CreationFacture(char date[11], float montant, int varidClient);
 void ajoute(int socket);
 void retire(int socket);
 int idClient(char login[50], char password[50]);
 int vecteurPos(int socket);
 float ConvertionFloat(char * chiffre);
-bool ViderCaddie();
-bool LesiIDuCaddie(char * reponse);
-bool ArticlePresent(char * reponse, int id);
+bool ViderCaddie(int varidClient);
+bool ArticlePresent(char * reponse, int id, int varidClient);
 
 
 //***** Parsing de la requete et creation de la reponse *************
-bool OVESP(char* requete , char* reponse ,int socket)
+bool OVESP(char* requete , char* reponse ,int socket, int varidClient)
 {
     // ***** Récupération nom de la requete *****************
     char* ptr = strtok(requete,"#");
-
-    if(strcmp(ptr, "LOGIN") != 0) {
-        printf("Debut : %d\n", *(int *)pthread_getspecific(cleClientID));
-    }
 
     // ***** LOGIN ******************************************
     if (strcmp(ptr,"LOGIN") == 0) 
     {
         // ***** Format requete : LOGIN#log#MDP#nvclient ***************
-        pthread_key_create(&cleClientID, NULL);
 
         char user[50], password[50], nc[1];
         int nvClient;
@@ -88,8 +81,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
                     {
                         sprintf(reponse,"LOGIN#ok#%d", varidClient);
                         ajoute(socket);
-                        pthread_setspecific(cleClientID, (void*)&varidClient);
-                        printf("ID : %d\n", *(int *)pthread_getspecific(cleClientID));
                     }
                     else
                     {
@@ -122,7 +113,6 @@ bool OVESP(char* requete , char* reponse ,int socket)
                     {
                         sprintf(reponse,"LOGIN#ok#%d", varidClient);
                         ajoute(socket);
-                        pthread_setspecific(cleClientID, (void*)&varidClient);
                     }
                     else
                     {
@@ -147,7 +137,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
     {
         // ********** CONSULT#idArticle
 
-        printf("ID : %d\n", *(int *)pthread_getspecific(cleClientID));
+        printf("Test id client : %d\n", varidClient);
 
         strcpy(reponse, "CONSULT#ko#-1"); //non trouvé par défaut
 
@@ -174,7 +164,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         int qtt = atoi(qttChar);
 
         //gestion de l'achat dans la bd
-        if(AchatArticle(idArt, qtt, reponse) == -1)
+        if(AchatArticle(idArt, qtt, reponse, varidClient) == -1)
         {
             sprintf(reponse,"CONSULT#ko#Erreur dans l'achat !");
         }
@@ -184,7 +174,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
     if(strcmp(ptr, "CADDIE") == 0)
     {
         //**************** CADDIE
-        if(!ConcatenationCaddie(reponse))
+        if(!ConcatenationCaddie(reponse, varidClient))
         {
             sprintf(reponse,"CADDIE#ko#Erreur dans le caddie !");
         }
@@ -198,7 +188,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         strcpy(idChar2,strtok(NULL,"#"));
         int idArt1 = atoi(idChar2);
 
-        if(!CancelArticle(idArt1))
+        if(!CancelArticle(idArt1, varidClient))
         {
             sprintf(reponse,"CANCEL#ko");
         }
@@ -213,7 +203,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         // ************* CANCELALL
 
         //récupération des id des article
-        int taille = testTableVide();
+        int taille = testCaddieVide(varidClient);
 
         // on retire les éléments de caddie et on met a jour la table article
 
@@ -222,7 +212,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
 
         for(int i=0; i<taille; i++)
         {
-            if(!CancelArticle(0))
+            if(!CancelArticle(0, varidClient))
             {
                 fprintf(stderr,"Erreur de cancelall !\n");
                 break;
@@ -243,20 +233,20 @@ bool OVESP(char* requete , char* reponse ,int socket)
         //récupérer le montant totale
         float montant = 0;
 
-        if(!Montant(&montant))
+        if(!Montant(&montant, varidClient))
         {
             fprintf(stderr,"Erreur dans le calcule du montant !\n");
         }
 
         //création de la facture
-        if(!CreationFacture(date, montant))
+        if(!CreationFacture(date, montant, varidClient))
         {
             fprintf(stderr,"Erreur dans la creation de facture !\n");
         }
 
 
         //vider caddie
-        if(!ViderCaddie())
+        if(!ViderCaddie(varidClient))
         {
             sprintf(reponse,"CONFIRMER#ko#Erreur de suppression de caddie!");
         }
@@ -265,13 +255,13 @@ bool OVESP(char* requete , char* reponse ,int socket)
     if(strcmp(ptr, "LOGOUT") == 0)
     {
         // ************* LOGOUT
-        int nbTupleCaddie = testTableVide();
+        int nbTupleCaddie = testCaddieVide(varidClient);
         if(nbTupleCaddie > 0)
         {
 
             for(int i=0; i<nbTupleCaddie; i++)
             {
-                if(!CancelArticle(0))
+                if(!CancelArticle(0, varidClient))
                 {
                     fprintf(stderr,"Erreur de cancelall 1 !\n");
                     break;
@@ -290,21 +280,9 @@ bool OVESP(char* requete , char* reponse ,int socket)
         }
         retire(socket);
 
-        pthread_key_delete(cleClientID);
-
         return false;
 
     }
-
-    if(strcmp(ptr, "IDCADDIE") == 0)
-    {
-        // ************* IDCADDIE
-        if(!LesiIDuCaddie(reponse))
-        {
-            fprintf(stderr,"Erreur dans la fonction de récupération des id du caddies !\n");
-        }
-    }
-
     if(strcmp(ptr, "PRESENCECADDIE") == 0)
     {
         // ************* PRESENCECADDIE#idArticle
@@ -313,7 +291,7 @@ bool OVESP(char* requete , char* reponse ,int socket)
         strcpy(idArtDansCaddie,strtok(NULL,"#"));
         int idArticleDansCaddie = atoi(idArtDansCaddie);
 
-        if(!ArticlePresent(reponse, idArticleDansCaddie))
+        if(!ArticlePresent(reponse, idArticleDansCaddie, varidClient))
         {
             fprintf(stderr,"Erreur dans la fonction de récupération de teste de presence dans le caddies !\n");
         }
@@ -321,9 +299,12 @@ bool OVESP(char* requete , char* reponse ,int socket)
     return true;
 }
 
-bool ArticlePresent(char * reponse, int id)
+bool ArticlePresent(char * reponse, int id, int varidClient)
 {
     sprintf(reponse, "PRESENCECADDIE#ko");
+
+    pthread_mutex_lock(&mutexConnection);
+
     connexion = mysql_init(NULL);
     char nomTable[20];
     strcpy(nomTable, "caddies");
@@ -337,51 +318,22 @@ bool ArticlePresent(char * reponse, int id)
 
     while((Tuple = mysql_fetch_row(resultat)) != NULL)
     {
-        if(atoi(Tuple[4]) == *(int *)pthread_getspecific(cleClientID) && atoi(Tuple[0]) == id)
+        if(atoi(Tuple[4]) == varidClient && atoi(Tuple[0]) == id)
         {
             sprintf(reponse, "PRESENCECADDIE#ok");
             break;
         }
     }
 
+    pthread_mutex_unlock(&mutexConnection);
     return true;
 }
-
-bool LesiIDuCaddie(char * reponse)
-{
-    connexion = mysql_init(NULL);
-    char nomTable[20];
-    strcpy(nomTable, "caddies");
-
-    char *tmp = (char *)malloc(256);
-    if(!ConnextionBd(nomTable))
-    {
-        fprintf(stderr, "Erreur de mysql connexion clients: %s\n",mysql_error(connexion));
-        return false;
-    }
-
-    strcpy(tmp, "IDCADDIE#ok#");
-    while((Tuple = mysql_fetch_row(resultat)) != NULL)
-    {
-        if(atoi(Tuple[4]) == *(int *)pthread_getspecific(cleClientID))
-        {
-            strcat(tmp, Tuple[0]);
-            strcat(tmp, "#");
-        }
-    }
-
-    int longueur = strlen(tmp);
-    tmp[longueur] = '\0';
-
-    strcpy(reponse, tmp);
-    mysql_close(connexion);
-
-    return true;
-}
-
 int idClient(char login[50], char password[50])
 {
     int idClient = -1;
+
+    pthread_mutex_lock(&mutexConnection);
+
     connexion = mysql_init(NULL);
     
     char nomTable[20];
@@ -402,6 +354,8 @@ int idClient(char login[50], char password[50])
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     printf("Id client : %d\n", idClient);
     return idClient;
 }
@@ -472,6 +426,9 @@ int EstPresent(char * login)
 
     char nomTable[20];
     strcpy(nomTable, "clients");
+
+    pthread_mutex_lock(&mutexConnection);
+
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion clients: %s\n",mysql_error(connexion));
@@ -488,16 +445,21 @@ int EstPresent(char * login)
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return indice;
 }
 
 bool MotDePasseCorrecte(char login[50], char password[50])
 {
     bool result = false;
-    connexion = mysql_init(NULL);
     
     char nomTable[20];
     strcpy(nomTable, "clients");
+
+    //connexion = mysql_init(NULL);
+    pthread_mutex_lock(&mutexConnection);
+
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion clients: %s\n",mysql_error(connexion));
@@ -516,12 +478,16 @@ bool MotDePasseCorrecte(char login[50], char password[50])
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return result;
 }
 
 bool CreationDuClient(int socket, char user[50], char password[50])
 {
     bool resultat = true;
+    pthread_mutex_lock(&mutexConnection);
+
     connexion = mysql_init(NULL);
 
     if (mysql_real_connect(connexion,"localhost","Student","PassStudent1_","PourStudent",0,0,0) == NULL)
@@ -540,14 +506,19 @@ bool CreationDuClient(int socket, char user[50], char password[50])
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return resultat;
 }
 
 void TestArticle(int idArticle, char * reponse, bool consult)
 {
+
+
     char nomTable[20];
     strcpy(nomTable, "articles");
 
+    pthread_mutex_lock(&mutexConnection);
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion articles: %s\n",mysql_error(connexion));
@@ -572,16 +543,20 @@ void TestArticle(int idArticle, char * reponse, bool consult)
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
 }
 
-int AchatArticle(int idArticle, int quantite, char * reponse)
+int AchatArticle(int idArticle, int quantite, char * reponse, int varidClient)
 {
     int res = 1;
     bool present = false, doublon = false;
-    connexion = mysql_init(NULL);
+    //connexion = mysql_init(NULL);
 
     char nomTable[20];
     strcpy(nomTable, "caddies");
+
+    pthread_mutex_lock(&mutexConnection);
 
     if(!ConnextionBd(nomTable))
     {
@@ -591,7 +566,7 @@ int AchatArticle(int idArticle, int quantite, char * reponse)
 
     while ((Tuple = mysql_fetch_row(resultat)) != NULL)
     {
-        if(atoi(Tuple[0]) == idArticle && *(int *)pthread_getspecific(cleClientID) == atoi(Tuple[4]))
+        if(atoi(Tuple[0]) == idArticle && varidClient == atoi(Tuple[4]))
         {
             doublon = true; //déjà présent => juste modifié la qtt
         }
@@ -638,12 +613,12 @@ int AchatArticle(int idArticle, int quantite, char * reponse)
 
                     if(!doublon)
                     {
-                        sprintf(requeteTmp, "INSERT INTO caddies VALUES (%d, '%s', %d, %f, %d)", idArticle, Tuple[1], quantite, prix, *(int *)pthread_getspecific(cleClientID));
+                        sprintf(requeteTmp, "INSERT INTO caddies VALUES (%d, '%s', %d, %f, %d)", idArticle, Tuple[1], quantite, prix, varidClient);
                         printf("requete : %s\n", requeteTmp);                    }
                     else
                     {
                         int stockcaddies = 0;
-                        sprintf(requeteTmp, "SELECT quantite FROM caddies WHERE idArticle = %d AND idClient = %d", idArticle, *(int *)pthread_getspecific(cleClientID));
+                        sprintf(requeteTmp, "SELECT quantite FROM caddies WHERE idArticle = %d AND idClient = %d", idArticle, varidClient);
                         if (mysql_query(connexion, requeteTmp) != 0)
                         {
                             fprintf(stderr, "Erreur de mysql_query: %s\n",mysql_error(connexion));
@@ -664,7 +639,7 @@ int AchatArticle(int idArticle, int quantite, char * reponse)
                         }
 
                         stockcaddies = stockcaddies + quantite;
-                        sprintf(requeteTmp, "UPDATE caddies SET quantite = %d WHERE idArticle = %d AND idClient = %d", stockcaddies, idArticle, *(int *)pthread_getspecific(cleClientID));
+                        sprintf(requeteTmp, "UPDATE caddies SET quantite = %d WHERE idArticle = %d AND idClient = %d", stockcaddies, idArticle, varidClient);
                         printf("requete : %s\n", requeteTmp);
                     }
 
@@ -691,14 +666,17 @@ int AchatArticle(int idArticle, int quantite, char * reponse)
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return res;
 }
 
-bool ConcatenationCaddie(char * reponse)
+bool ConcatenationCaddie(char * reponse, int varidClient)
 {
     char nomTable[20];
     strcpy(nomTable, "caddies");
 
+    pthread_mutex_lock(&mutexConnection);
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion caddies: %s\n",mysql_error(connexion));
@@ -710,7 +688,7 @@ bool ConcatenationCaddie(char * reponse)
     sprintf(reponse, "CADDIE#ok#0");//0 ne change pas atoi
     while ((Tuple = mysql_fetch_row(resultat)) != NULL && i < 5)
     {
-        if(atoi(Tuple[4])  == * (int *)pthread_getspecific(cleClientID))
+        if(atoi(Tuple[4])  == varidClient)
         {
             // Allouez de la mémoire pour chaque chaîne de caractères
             char *occurrence = (char *)malloc(256); // Vous pouvez ajuster la taille selon vos besoins
@@ -730,41 +708,55 @@ bool ConcatenationCaddie(char * reponse)
     reponse[longueur-1] = '\0';*/
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return true;
 }
 
-bool CancelArticle(int indiceArticle)
+bool CancelArticle(int indiceArticle, int varidClient)
 {
     int qtt = 0, qttstock;
 
     char nomTable[20];
     strcpy(nomTable, "caddies");
 
+    pthread_mutex_lock(&mutexConnection);
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion caddies: %s\n",mysql_error(connexion));
         return false;
     } 
 
-
     int i = 0;
-    Tuple = mysql_fetch_row(resultat);
-    while (i != indiceArticle)
+    bool trouve = false;
+
+    while(!trouve)
     {
         Tuple = mysql_fetch_row(resultat);
-        i++;
+        if(atoi(Tuple[4]) == varidClient && i == indiceArticle)
+        {
+            trouve = true;
+        }
+        if(atoi(Tuple[4]) == varidClient && i != indiceArticle)
+        {
+            i++;
+        }
     }
 
     //trouver
 
     int idASupprimer = atoi(Tuple[0]);
     int quantite = atoi(Tuple[2]);
+    char nom[200];
+    strcpy(nom, Tuple[1]);
+    printf("\n\nIndice : %d\n", indiceArticle);
+    printf("Nom : %s, Qtt : %d, idArticle : %d, idClient : %d\n\n", nom, quantite, idASupprimer, atoi(Tuple[4]));
 
     //je supprime le tuple
     char requete_delete[256];
     printf("ID : %d\n", idASupprimer);
 
-    sprintf(requete_delete, "DELETE FROM caddies WHERE idArticle = %d AND idClient = %d ORDER BY idArticle LIMIT 1", idASupprimer, *(int *)pthread_getspecific(cleClientID));
+    sprintf(requete_delete, "DELETE FROM caddies WHERE idArticle = %d AND idClient = %d ORDER BY idArticle LIMIT 1", idASupprimer, varidClient);
 
 
 
@@ -813,13 +805,17 @@ bool CancelArticle(int indiceArticle)
 
     mysql_free_result(resultat);
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return true;
 }
 
-int testTableVide()
+int testCaddieVide(int varidClient)
 {
     int nombre_enregistrements = 0;
 
+
+    pthread_mutex_lock(&mutexConnection);
     connexion = mysql_init(NULL);
     if (connexion == NULL) {
         fprintf(stderr, "(OVESP) Erreur lors de l'initialisation de la connexion : %s\n", mysql_error(connexion));
@@ -832,7 +828,7 @@ int testTableVide()
         return -1;
     }
 
-    sprintf(requete, "SELECT COUNT(*) FROM caddies WHERE idClient = %d", *(int*)pthread_getspecific(cleClientID));
+    sprintf(requete, "SELECT COUNT(*) FROM caddies WHERE idClient = %d", varidClient);
 
     if (mysql_query(connexion, requete) != 0) {
         fprintf(stderr, "Erreur de mysql_query: %s\n", mysql_error(connexion));
@@ -857,6 +853,7 @@ int testTableVide()
     mysql_free_result(resultat);
     mysql_close(connexion);
 
+    pthread_mutex_unlock(&mutexConnection);
     return nombre_enregistrements;
 }
 
@@ -877,12 +874,14 @@ void HeureActuelle(char *Heure)
     printf("Date actuelle : %s\n", Heure);
 }
 
-bool Montant(float * montant)
+bool Montant(float * montant, int varidClient)
 {
     float tmp = 0;
 
     char nomTable[20];
     strcpy(nomTable, "caddies");
+
+    pthread_mutex_lock(&mutexConnection);
 
     if(!ConnextionBd(nomTable))
     {
@@ -893,7 +892,7 @@ bool Montant(float * montant)
     int i = 0;
     while ((Tuple = mysql_fetch_row(resultat)) != NULL && i < 5)
     {
-        if(atoi(Tuple[4]) == *(int *)pthread_getspecific(cleClientID))
+        if(atoi(Tuple[4]) == varidClient)
         {
             printf("%d) %s\n", i, Tuple[3]);
 
@@ -910,11 +909,15 @@ bool Montant(float * montant)
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return true;
 }
 
-bool CreationFacture( char date[11], float montant)
+bool CreationFacture( char date[11], float montant, int varidClient)
 {
+
+    pthread_mutex_lock(&mutexConnection);
     connexion = mysql_init(NULL);
     if (mysql_real_connect(connexion,"localhost","Student","PassStudent1_","PourStudent",0,0,0) == NULL)
     {
@@ -924,7 +927,7 @@ bool CreationFacture( char date[11], float montant)
     }
 
 
-    sprintf(requete,"insert into factures values (NULL, %d,'%s', %f, %d);",*(int *)pthread_getspecific(cleClientID), date, montant, 0);
+    sprintf(requete,"insert into factures values (NULL, %d,'%s', %f, %d);",varidClient, date, montant, 0);
     if(mysql_query(connexion,requete) != 0)
     {
         fprintf(stderr,"(OVESP) Erreur de mysql_query...\n");
@@ -933,6 +936,8 @@ bool CreationFacture( char date[11], float montant)
     }
 
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return true;
 }
 float ConvertionFloat(char * chiffre)
@@ -952,13 +957,14 @@ float ConvertionFloat(char * chiffre)
     return prix;
 }
 
-bool ViderCaddie()
+bool ViderCaddie(int varidClient)
 {
 
     // Exécutez la commande SQL DELETE pour vider la table
     char nomTable[20];
     strcpy(nomTable, "caddies");
 
+    pthread_mutex_lock(&mutexConnection);
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion caddies: %s\n",mysql_error(connexion));
@@ -968,9 +974,9 @@ bool ViderCaddie()
     int i = 0;
     while ((Tuple = mysql_fetch_row(resultat)) != NULL && i < 5)
     {
-        if(atoi(Tuple[4]) == *(int *)pthread_getspecific(cleClientID))
+        if(atoi(Tuple[4]) == varidClient)
         {
-            sprintf(requete,"DELETE FROM caddies WHERE idClient = %d",*(int *)pthread_getspecific(cleClientID));
+            sprintf(requete,"DELETE FROM caddies WHERE idClient = %d",varidClient);
             if (mysql_query(connexion, requete) != 0)
             {
                 fprintf(stderr, "Erreur lors de l'exécution de la commande SQL : %s\n", mysql_error(connexion));
@@ -984,6 +990,8 @@ bool ViderCaddie()
 
     printf("suppression du caddie effectué avec succès !\n");
     mysql_close(connexion);
+
+    pthread_mutex_unlock(&mutexConnection);
     return true;
 }
 
@@ -994,6 +1002,7 @@ void OVESP_Close()
     char nomTable[20];
     strcpy(nomTable, "caddies");
 
+    pthread_mutex_lock(&mutexConnection);
     if(!ConnextionBd(nomTable))
     {
         fprintf(stderr, "Erreur de mysql connexion caddies: %s\n",mysql_error(connexion));
@@ -1073,6 +1082,7 @@ void OVESP_Close()
 
 
     mysql_close(connexion);
+    pthread_mutex_unlock(&mutexConnection);
 
     pthread_mutex_lock(&mutexClients);
     for (int i=0 ; i<nbClients ; i++)

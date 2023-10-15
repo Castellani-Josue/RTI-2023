@@ -143,9 +143,10 @@ void HandlerSIGINT(int s)
 
 void TraitementConnexion(int sService)
 {
- char requete[200], reponse[200];
+ char requete[200], reponse[200], tmp[200];
  int nbLus, nbEcrits;
  bool onContinue = true;
+ int idClient = -1;
  
  while (onContinue)
  {
@@ -171,8 +172,18 @@ void TraitementConnexion(int sService)
 	 printf("\t[THREAD %p] Requete recue = %s\n",pthread_self(),requete);
 
 	 // ***** Traitement de la requete ***********
-	 onContinue = OVESP(requete,reponse,sService);
+	 onContinue = OVESP(requete,reponse,sService,idClient);
 	 // ***** Envoi de la reponse ****************
+	strcpy(tmp, reponse);
+	char *ptr = strtok(tmp,"#"); //login
+	if(strcmp(ptr, "LOGIN") == 0)
+	{
+		ptr = strtok(NULL,"#"); // statut = ok ou ko
+		ptr = strtok(NULL,"#"); // idClient
+		idClient = atoi(ptr);
+	}
+
+  	
 	 
 	 if ((nbEcrits = Send(sService,reponse,strlen(reponse))) < 0)
 	 {
